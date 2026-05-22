@@ -1,6 +1,6 @@
 # attune — Node.js SDK for Attune Actions & Sensors
 
-A lightweight TypeScript package providing boilerplate for writing [Attune](https://github.com/AndroxxTraxxon/attune) actions and sensors.
+A lightweight TypeScript package providing boilerplate for writing [Attune](https://github.com/attune-system/attune) actions and sensors.
 
 ## Installation
 
@@ -32,20 +32,60 @@ The context is a module-level singleton available anywhere after import:
 
 ```typescript
 import { context, runAction } from "attune";
-import { AttuneClient } from "attune/client";
 
 function main(params: { url: string; method?: string }) {
-  if (context.hasApiToken) {
-    const client = new AttuneClient();
-    // ... use the API with the execution-scoped token
-  }
   return { action: context.actionRef, exec_id: context.executionId };
 }
 
 runAction(main);
 ```
 
-### Using the API Client
+### Using the Generated API Client
+
+The SDK ships a fully typed API client generated from the Attune OpenAPI spec.
+Both `context` (actions) and `sensorContext` (sensors) expose a `.client`
+property that is pre-configured with the execution-scoped API token:
+
+```typescript
+import { context, runAction } from "attune";
+import { listPacks, getExecution } from "attune/api_client";
+
+async function main(params: { executionId: string }) {
+  // Use the pre-authenticated client from context
+  const packs = await listPacks({ client: context.client });
+  const exec = await getExecution({
+    client: context.client,
+    path: { id: params.executionId },
+  });
+  return { packs: packs.data, execution: exec.data };
+}
+
+runAction(main);
+```
+
+The client is also available in sensor context:
+
+```typescript
+import { sensorContext } from "attune";
+import { listSensors } from "attune/api_client";
+
+const sensors = await listSensors({ client: sensorContext.client });
+```
+
+You can also create a standalone client instance for custom configurations:
+
+```typescript
+import { createClient } from "attune";
+
+const client = createClient({
+  baseUrl: "http://localhost:8080",
+  headers: { Authorization: "Bearer my-token" },
+});
+```
+
+### Legacy HTTP Client
+
+A simpler HTTP client is also available for ad-hoc requests:
 
 ```typescript
 import { AttuneClient } from "attune/client";
@@ -203,3 +243,22 @@ npm install
 npm run build
 npm test
 ```
+
+### Regenerating the API Client
+
+The generated client lives in `src/api_client/` and is checked into the repo so
+pack developers don't need to generate it themselves. To regenerate after API
+changes:
+
+```bash
+# From a running API (default: localhost:8080)
+npm run generate-client
+
+# From a local spec file
+./scripts/generate-client.sh /path/to/openapi.json
+
+# From a custom API URL
+ATTUNE_API_URL=http://my-host:8080 npm run generate-client
+```
+
+This requires `@hey-api/openapi-ts` (included as a dev dependency).
