@@ -1,0 +1,56 @@
+{
+  "name": "attune-sdk",
+  "version": "0.1.0",
+  "description": "Node.js SDK for building Attune actions and sensors",
+  "license": "Apache-2.0",
+  "keywords": [
+    "attune",
+    "automation",
+    "orchestration"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    },
+    "./api_client": {
+      "import": "./dist/api_client/index.js",
+      "types": "./dist/api_client/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "generate-client": "./scripts/generate-client.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.97.2",
+    "@types/amqplib": "^0.10.8",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "amqplib": ">=0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "amqplib": {
+      "optional": true
+    }
+  }
+}
