@@ -6,7 +6,7 @@ describe("RuleState", () => {
   it("basic construction via _handleRuleMessage", () => {
     const sensor = new Sensor();
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 1,
       rule_ref: "mypack.my_rule",
       trigger_ref: "mypack.my_trigger",
@@ -64,7 +64,7 @@ describe("Sensor base", () => {
 
     // Create
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 10,
       rule_ref: "pack.rule",
       trigger_params: { interval: 5 },
@@ -73,7 +73,7 @@ describe("Sensor base", () => {
 
     // Update params
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 10,
       rule_ref: "pack.rule",
       trigger_params: { interval: 10 },
@@ -81,12 +81,55 @@ describe("Sensor base", () => {
     expect(events).toContainEqual(["updated", 10, { interval: 5 }]);
 
     // Disable
-    sensor._handleRuleMessage({ event_type: "RuleDisabled", rule_id: 10 });
+    sensor._handleRuleMessage({ event_type: "rule.disabled", rule_id: 10 });
     expect(events).toContainEqual(["disabled", 10]);
 
     // Delete
-    sensor._handleRuleMessage({ event_type: "RuleDeleted", rule_id: 10 });
+    sensor._handleRuleMessage({ event_type: "rule.deleted", rule_id: 10 });
     expect(events).toContainEqual(["deleted", 10]);
+  });
+
+  it("extracts rule lifecycle from notifier envelope", () => {
+    const sensor = new Sensor();
+    sensor._handleNotifierEnvelope(Buffer.from(JSON.stringify({
+      type: "notification",
+      payload: {
+        event_type: "rule.created",
+        rule_id: 11,
+        rule_ref: "pack.rule",
+        trigger_ref: "pack.trigger",
+        trigger_params: { interval: 7 },
+        active: true,
+      },
+    })));
+
+    expect(sensor.rules.get(11)).toEqual({
+      ruleId: 11,
+      ruleRef: "pack.rule",
+      triggerRef: "pack.trigger",
+      triggerParams: { interval: 7 },
+      enabled: true,
+    });
+  });
+
+  it("builds notifier trigger subscriptions from managed rules", () => {
+    const sensor = new Sensor();
+    sensor._handleRuleMessage({
+      event_type: "rule.created",
+      rule_id: 1,
+      rule_ref: "pack.rule1",
+      trigger_ref: "pack.trigger",
+      trigger_params: {},
+    });
+    sensor._handleRuleMessage({
+      event_type: "rule.created",
+      rule_id: 2,
+      rule_ref: "pack.rule2",
+      trigger_ref: "pack.trigger",
+      trigger_params: {},
+    });
+
+    expect(sensor._getManagedTriggerFilters()).toEqual(["trigger_ref:pack.trigger"]);
   });
 });
 
@@ -104,7 +147,7 @@ describe("PollingSensor", () => {
 
     const sensor = new TestSensor();
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 1,
       rule_ref: "pack.rule1",
       trigger_params: {},
@@ -127,13 +170,13 @@ describe("PollingSensor", () => {
 
     const sensor = new TestSensor();
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 1,
       rule_ref: "pack.rule1",
       trigger_params: {},
     });
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 2,
       rule_ref: "pack.rule2",
       trigger_params: {},
@@ -158,7 +201,7 @@ describe("AsyncPollingSensor", () => {
 
     const sensor = new TestSensor();
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 1,
       rule_ref: "pack.rule1",
       trigger_params: {},
@@ -182,7 +225,7 @@ describe("AsyncPollingSensor", () => {
 
     const sensor = new TestSensor();
     sensor._handleRuleMessage({
-      event_type: "RuleCreated",
+      event_type: "rule.created",
       rule_id: 1,
       rule_ref: "pack.rule1",
       trigger_params: {},

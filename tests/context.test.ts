@@ -59,7 +59,7 @@ describe("SensorContext", () => {
   it("reads env vars", async () => {
     vi.stubEnv("ATTUNE_SENSOR_REF", "mypack.my_sensor");
     vi.stubEnv("ATTUNE_SENSOR_ID", "7");
-    vi.stubEnv("ATTUNE_MQ_URL", "amqp://rabbit:5672");
+    vi.stubEnv("ATTUNE_NOTIFIER_WS_URL", "ws://notifier:8081/ws");
 
     const { _buildSensorContext } = await import("../src/context.js");
     const ctx = _buildSensorContext();
@@ -67,7 +67,7 @@ describe("SensorContext", () => {
     expect(ctx.sensorRef).toBe("mypack.my_sensor");
     expect(ctx.sensorId).toBe("7");
     expect(ctx.packRef).toBe("mypack");
-    expect(ctx.mqUrl).toBe("amqp://rabbit:5672");
+    expect(ctx.notifierWsUrl).toBe("ws://notifier:8081/ws");
 
     vi.unstubAllEnvs();
   });

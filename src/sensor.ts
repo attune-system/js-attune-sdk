@@ -24,6 +24,7 @@
  */
 
 import { sensorContext, type SensorContext } from "./context.js";
+import WebSocket from "ws";
 
 // ---------------------------------------------------------------------------
 // Rule representation
@@ -36,6 +37,8 @@ export interface RuleState {
   triggerParams: Record<string, unknown>;
   enabled: boolean;
 }
+
+type NormalizedRuleEventType = "created" | "enabled" | "disabled" | "deleted" | "updated";
 
 // ---------------------------------------------------------------------------
 // Logger (structured JSON to stderr)
@@ -233,51 +236,84 @@ export class Sensor {
   // ------------------------------------------------------------------
 
   _handleRuleMessage(message: Record<string, unknown>): void {
-    const eventType = (message.event_type as string) ?? "";
+    const eventType = normalizeRuleEventType(message.event_type);
+    if (!eventType) return;
     const rawRuleId = message.rule_id;
     if (rawRuleId == null) return;
 
     const ruleId = Number(rawRuleId);
+    if (Number.isNaN(ruleId)) return;
     const ruleRef = (message.rule_ref as string) ?? `rule_${ruleId}`;
     const triggerRef = (message.trigger_ref as string) ?? (message.trigger_type as string) ?? "";
-    const triggerParams = (message.trigger_params as Record<string, unknown>) ?? {};
+    const triggerParams = toRecord(message.trigger_params) ?? toRecord(message.config) ?? {};
+    const active = typeof message.active === "boolean" ? message.active : undefined;
 
-    if (eventType === "RuleCreated" || eventType === "RuleEnabled") {
-      const rule: RuleState = { ruleId, ruleRef, triggerRef, triggerParams, enabled: true };
+    if (eventType === "created" || eventType === "enabled") {
+      const rule: RuleState = {
+        ruleId,
+        ruleRef,
+        triggerRef,
+        triggerParams,
+        enabled: active ?? true,
+      };
       const existing = this._rules.get(ruleId);
       this._rules.set(ruleId, rule);
 
       if (existing && JSON.stringify(existing.triggerParams) !== JSON.stringify(triggerParams)) {
         this.onRuleUpdated(rule, existing.triggerParams);
-      } else if (eventType === "RuleEnabled" && existing) {
+      } else if (eventType === "enabled" && existing) {
         this.onRuleEnabled(rule);
       } else {
         this.onRuleCreated(rule);
       }
-    } else if (eventType === "RuleDisabled") {
+    } else if (eventType === "disabled") {
       const rule = this._rules.get(ruleId);
       if (rule) {
         rule.enabled = false;
         this.onRuleDisabled(rule);
       }
-    } else if (eventType === "RuleDeleted") {
+    } else if (eventType === "deleted") {
       const rule = this._rules.get(ruleId);
       this._rules.delete(ruleId);
       if (rule) this.onRuleDeleted(rule);
-    } else if (eventType === "RuleUpdated") {
+    } else if (eventType === "updated") {
       const existing = this._rules.get(ruleId);
       if (existing) {
         const oldParams = { ...existing.triggerParams };
+        existing.ruleRef = ruleRef;
+        existing.triggerRef = triggerRef;
         existing.triggerParams = triggerParams;
+        existing.enabled = active ?? existing.enabled;
         if (JSON.stringify(oldParams) !== JSON.stringify(triggerParams)) {
           this.onRuleUpdated(existing, oldParams);
         }
       } else {
-        const rule: RuleState = { ruleId, ruleRef, triggerRef, triggerParams, enabled: true };
+        const rule: RuleState = {
+          ruleId,
+          ruleRef,
+          triggerRef,
+          triggerParams,
+          enabled: active ?? true,
+        };
         this._rules.set(ruleId, rule);
         this.onRuleCreated(rule);
       }
     }
+  }
+
+  _handleNotifierEnvelope(data: WebSocket.RawData): void {
+    const message = extractRuleLifecycleMessage(data);
+    if (!message) return;
+    this._handleRuleMessage(message);
+  }
+
+  _getManagedTriggerFilters(): string[] {
+    return [...new Set(
+      [...this._rules.values()]
+        .map((rule) => rule.triggerRef)
+        .filter((triggerRef) => triggerRef.length > 0)
+        .map((triggerRef) => `trigger_ref:${triggerRef}`),
+    )];
   }
 
   _bootstrapRules(): void {
@@ -296,7 +332,7 @@ export class Sensor {
       const ruleId = obj.id ?? obj.rule_id;
       if (ruleId == null) continue;
       this._handleRuleMessage({
-        event_type: "RuleCreated",
+        event_type: "rule.created",
         rule_id: ruleId,
         rule_ref: obj.ref ?? obj.rule_ref ?? `rule_${ruleId}`,
         trigger_ref: obj.trigger_ref ?? "",
@@ -306,74 +342,102 @@ export class Sensor {
   }
 
   // ------------------------------------------------------------------
-  // MQ consumer (optional)
+  // Notifier WebSocket consumer (optional)
   // ------------------------------------------------------------------
 
-  private _mqConnection: unknown = null;
+  private _notifierConnection: WebSocket | null = null;
 
-  async _startMqConsumer(): Promise<boolean> {
-    const mqUrl = this.context.mqUrl;
-    if (!process.env.ATTUNE_MQ_URL) return false;
-
-    let amqplib: typeof import("amqplib");
-    try {
-      amqplib = await import("amqplib");
-    } catch {
-      this.logger.error("amqplib library required for MQ rule lifecycle. Install with: npm install amqplib");
+  async _startNotifierConsumer(): Promise<boolean> {
+    const notifierWsUrl = this.context.notifierWsUrl;
+    if (!notifierWsUrl) {
+      this.logger.info("Notifier WebSocket URL not configured; managed rule updates disabled");
       return false;
     }
 
-    this._mqConsumeLoop(amqplib, mqUrl);
+    this._notifierConsumeLoop(notifierWsUrl).catch((err) => {
+      this.logger.warn(`Notifier loop exited: ${err}`);
+    });
     return true;
   }
 
-  private async _mqConsumeLoop(amqplib: typeof import("amqplib"), mqUrl: string): Promise<void> {
-    const queueName = `sensor.${this.context.sensorRef}`;
-    const routingKeys = ["rule.created", "rule.enabled", "rule.disabled", "rule.deleted", "rule.updated"];
-
+  private async _notifierConsumeLoop(notifierWsUrl: string): Promise<void> {
     while (!this._shutdownRequested) {
       try {
-        const connection = await amqplib.connect(mqUrl);
-        this._mqConnection = connection;
-        const channel = await connection.createChannel();
-
-        await channel.assertExchange(this.context.mqExchange, "topic", { durable: true });
-        await channel.assertQueue(queueName, { durable: true });
-        for (const rk of routingKeys) {
-          await channel.bindQueue(queueName, this.context.mqExchange, rk);
-        }
-
-        this.logger.info("MQ connected", { queue: queueName });
-
-        await channel.consume(queueName, (msg) => {
-          if (!msg) return;
-          try {
-            const message = JSON.parse(msg.content.toString());
-            this._handleRuleMessage(message);
-          } catch (err) {
-            this.logger.warn(`Invalid MQ message: ${err}`);
-          }
-          channel.ack(msg);
-        });
-
-        // Wait until shutdown
-        await new Promise<void>((resolve) => {
-          const check = setInterval(() => {
-            if (this._shutdownRequested) {
-              clearInterval(check);
-              resolve();
-            }
-          }, 1000);
-        });
-
-        await connection.close();
-        this._mqConnection = null;
+        await this._connectNotifier(notifierWsUrl);
       } catch (err) {
-        this.logger.warn(`MQ connection error, retrying in 5s: ${err}`);
-        this._mqConnection = null;
+        this.logger.warn(`Notifier connection error, retrying in 5s: ${err}`);
+      } finally {
+        this._notifierConnection = null;
+      }
+      if (!this._shutdownRequested) {
         await sleep(5000);
       }
     }
+  }
+
+  private async _connectNotifier(notifierWsUrl: string): Promise<void> {
+    const filters = this._getManagedTriggerFilters();
+    if (filters.length === 0) {
+      this.logger.info("No managed trigger refs available for notifier subscriptions");
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      let connected = false;
+      let settled = false;
+      const ws = new WebSocket(notifierWsUrl, {
+        headers: { Authorization: `Bearer ${this.context.apiToken}` },
+      });
+      this._notifierConnection = ws;
+
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (this._notifierConnection === ws) {
+          this._notifierConnection = null;
+        }
+        if (error && !connected) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      };
+
+      ws.on("open", () => {
+        connected = true;
+        for (const filter of filters) {
+          ws.send(JSON.stringify({ type: "subscribe", filter }));
+        }
+        this.logger.info("Notifier connected", { filters });
+        if (this._shutdownRequested) {
+          ws.close();
+        }
+      });
+
+      ws.on("message", (data: WebSocket.RawData) => {
+        try {
+          this._handleNotifierEnvelope(data);
+        } catch (err) {
+          this.logger.warn(`Invalid notifier message: ${err}`);
+        }
+      });
+
+      ws.on("error", (err: Error) => {
+        this.logger.warn(`Notifier socket error: ${err.message}`);
+        if (!connected) finish(err);
+      });
+
+      ws.on("close", (code: number, reason: Buffer) => {
+        if (!this._shutdownRequested) {
+          const closeReason = decodeWebSocketReason(reason);
+          this.logger.warn("Notifier disconnected", {
+            code,
+            ...(closeReason ? { reason: closeReason } : {}),
+          });
+        }
+        finish();
+      });
+    });
   }
 
   // ------------------------------------------------------------------
@@ -403,7 +467,7 @@ export class Sensor {
     try {
       this._bootstrapRules();
       await this.setup();
-      await this._startMqConsumer();
+      await this._startNotifierConsumer();
       this.logger.info("Sensor started", { active_rules: this._rules.size });
       await this.run();
     } catch (err) {
@@ -411,6 +475,7 @@ export class Sensor {
       return 1;
     } finally {
       this._shutdownRequested = true;
+      this._notifierConnection?.close();
       try {
         await this.cleanup();
       } catch (err) {
@@ -613,4 +678,67 @@ function interruptibleSleep(ms: number, signal: AbortSignal): Promise<void> {
     const timer = setTimeout(resolve, ms);
     signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
   });
+}
+
+function normalizeRuleEventType(eventType: unknown): NormalizedRuleEventType | null {
+  if (typeof eventType !== "string") return null;
+  switch (eventType) {
+    case "RuleCreated":
+    case "rule.created":
+      return "created";
+    case "RuleEnabled":
+    case "rule.enabled":
+      return "enabled";
+    case "RuleDisabled":
+    case "rule.disabled":
+      return "disabled";
+    case "RuleDeleted":
+    case "rule.deleted":
+      return "deleted";
+    case "RuleUpdated":
+    case "rule.updated":
+      return "updated";
+    default:
+      return null;
+  }
+}
+
+function extractRuleLifecycleMessage(data: WebSocket.RawData): Record<string, unknown> | null {
+  const raw = decodeWebSocketMessage(data);
+  if (!raw) return null;
+
+  const parsed = JSON.parse(raw) as unknown;
+  const envelope = toRecord(parsed);
+  if (!envelope) return null;
+
+  if (envelope.type === "welcome") return null;
+  if (envelope.type === "error") {
+    throw new Error(typeof envelope.message === "string" ? envelope.message : "unknown notifier error");
+  }
+
+  const payload =
+    toRecord(envelope.payload) ??
+    toRecord(envelope.data) ??
+    envelope;
+
+  return typeof payload.event_type === "string" ? payload : null;
+}
+
+function decodeWebSocketMessage(data: WebSocket.RawData): string | null {
+  if (typeof data === "string") return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
+  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
+  if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8");
+  return null;
+}
+
+function decodeWebSocketReason(reason: Buffer): string | null {
+  const decoded = reason.toString("utf8").trim();
+  return decoded.length > 0 ? decoded : null;
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

@@ -38,19 +38,14 @@
   "engines": {
     "node": ">=18"
   },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.97.2",
-    "@types/amqplib": "^0.10.8",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.4.0",
     "vitest": "^3.0.0"
-  },
-  "peerDependencies": {
-    "amqplib": ">=0.10.0"
-  },
-  "peerDependenciesMeta": {
-    "amqplib": {
-      "optional": true
-    }
   }
 }

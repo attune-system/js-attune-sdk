@@ -67,10 +67,8 @@ export interface SensorContext {
   readonly apiUrl: string;
   /** The sensor-scoped API token. */
   readonly apiToken: string;
-  /** The RabbitMQ connection URL. */
-  readonly mqUrl: string;
-  /** The RabbitMQ exchange name. */
-  readonly mqExchange: string;
+  /** The notifier WebSocket URL for managed-sensor lifecycle updates. */
+  readonly notifierWsUrl: string | undefined;
   /** The configured log level. */
   readonly logLevel: string;
   /** The pack reference derived from sensorRef. */
@@ -164,8 +162,7 @@ function buildSensorContext(): SensorContext {
     sensorId: process.env.ATTUNE_SENSOR_ID ?? "0",
     apiUrl,
     apiToken,
-    mqUrl: process.env.ATTUNE_MQ_URL ?? "amqp://localhost:5672",
-    mqExchange: process.env.ATTUNE_MQ_EXCHANGE ?? "attune",
+    notifierWsUrl: process.env.ATTUNE_NOTIFIER_WS_URL || undefined,
     logLevel: (process.env.ATTUNE_LOG_LEVEL ?? "info").toUpperCase(),
     packRef,
     config,

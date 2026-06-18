@@ -5,8 +5,7 @@ A lightweight TypeScript package providing boilerplate for writing [Attune](http
 ## Installation
 
 ```bash
-npm install attune                # core (no extra dependencies)
-npm install attune amqplib        # with RabbitMQ for sensor rule lifecycle
+npm install attune
 ```
 
 ## Writing Actions
@@ -98,8 +97,8 @@ await client.post("/api/v1/artifacts/1/versions/file", { json: { created_by: "my
 ## Writing Sensors
 
 Sensors are long-running processes that emit events. The SDK provides rule
-lifecycle management, signal handling (SIGINT/SIGTERM), and MQ integration
-out of the box.
+lifecycle management, signal handling (SIGINT/SIGTERM), and notifier WebSocket
+delivery for managed rule updates out of the box.
 
 The sensor context is a module-level singleton, accessible anywhere:
 
@@ -108,8 +107,14 @@ import { sensorContext } from "attune";
 
 console.log(sensorContext.sensorRef);
 console.log(sensorContext.apiUrl);
+console.log(sensorContext.notifierWsUrl);
 console.log(sensorContext.config); // ATTUNE_SENSOR_CONFIG_* vars
 ```
+
+Managed sensors bootstrap their active rules from `ATTUNE_SENSOR_TRIGGERS`, then
+listen for live rule lifecycle updates from `ATTUNE_NOTIFIER_WS_URL` using the
+existing `ATTUNE_API_TOKEN`. The SDK subscribes to `trigger_ref:<ref>` filters
+for the managed trigger refs it bootstrapped.
 
 ### Polling Sensor (`PollingSensor`)
 
@@ -231,8 +236,8 @@ class StatefulSensor extends PollingSensor {
 | `ATTUNE_SENSOR_ID` | Sensor database ID |
 | `ATTUNE_API_URL` | API base URL |
 | `ATTUNE_API_TOKEN` | Sensor-scoped API token |
-| `ATTUNE_MQ_URL` | RabbitMQ connection URL |
-| `ATTUNE_MQ_EXCHANGE` | RabbitMQ exchange name |
+| `ATTUNE_NOTIFIER_WS_URL` | Notifier WebSocket URL for live managed-rule updates |
+| `ATTUNE_SENSOR_TRIGGERS` | Bootstrap JSON array of managed rule bindings |
 | `ATTUNE_LOG_LEVEL` | Log verbosity |
 
 ## Development
