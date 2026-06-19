@@ -1,10 +1,10 @@
 /**
- * Execution context — singletons providing access to environment
- * variables and execution metadata.
+ * Execution context — singletons providing access to environment variables and
+ * execution metadata.
  *
- * These are computed once at import time from environment variables and are
- * immutable for the lifetime of the process (which is a single action execution
- * or sensor run).
+ * Action fields are computed once at import time. Sensor token access is
+ * intentionally mutable and can be re-read from runtime-provided token state
+ * sources so managed sensors can pick up external token rotation.
  *
  * Usage:
  *   import { context, sensorContext } from "attune";
@@ -18,7 +18,19 @@
  *   const response = await listPacks({ client: context.client });
  */
 
+import fs from "node:fs";
 import { createClient, type Client } from "./api_client/client/index.js";
+
+export type SensorTokenSource = "none" | "env" | "state_env" | "state_file";
+
+export interface SensorTokenState {
+  /** The current token to use for API and notifier auth. */
+  readonly token: string;
+  /** Token expiry when provided by the runtime; null when unavailable. */
+  readonly expiresAt: Date | null;
+  /** Where this token state was resolved from. */
+  readonly source: SensorTokenSource;
+}
 
 export interface ActionContext {
   /** The action reference (e.g., `mypack.deploy`). */
@@ -65,7 +77,7 @@ export interface SensorContext {
   readonly sensorId: string;
   /** The Attune API base URL. */
   readonly apiUrl: string;
-  /** The sensor-scoped API token. */
+  /** Initial sensor-scoped API token snapshot at context creation time. */
   readonly apiToken: string;
   /** The notifier WebSocket URL for managed-sensor lifecycle updates. */
   readonly notifierWsUrl: string | undefined;
@@ -75,10 +87,21 @@ export interface SensorContext {
   readonly packRef: string;
   /** Sensor-specific config from ATTUNE_SENSOR_CONFIG_* environment variables. */
   readonly config: Record<string, string>;
+  /** Optional JSON token state file path for managed-sensor token rotation. */
+  readonly tokenStatePath: string | undefined;
+  /**
+   * Returns the latest sensor API token, re-reading rotation state when
+   * available.
+   */
+  readonly getApiToken: () => string;
+  /**
+   * Returns the latest token plus source/expiry metadata.
+   */
+  readonly getTokenState: () => SensorTokenState;
   /**
    * Lazily constructed authenticated API client for this sensor.
    *
-   * Uses the sensor-scoped token and API URL from the context.
+   * Uses the sensor token accessor so each request sees rotated credentials.
    * The client instance is cached for the lifetime of the process.
    *
    * Usage:
@@ -111,14 +134,111 @@ function getActionClient(apiUrl: string, apiToken: string | undefined): Client {
   return _actionClient;
 }
 
-function getSensorClient(apiUrl: string, apiToken: string): Client {
+function getSensorClient(apiUrl: string, tokenProvider: () => string): Client {
   if (!_sensorClient) {
     _sensorClient = createClient({
       baseUrl: apiUrl,
-      headers: { Authorization: `Bearer ${apiToken}` },
+      auth: () => tokenProvider() || undefined,
     });
   }
   return _sensorClient;
+}
+
+const NUMERIC_STRING_RE = /^\d+$/;
+
+function parseExpiresAt(value: unknown): Date | null {
+  if (value == null || value === "") {
+    return null;
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const millis = value > 10_000_000_000 ? value : value * 1000;
+    const parsed = new Date(millis);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    if (NUMERIC_STRING_RE.test(trimmed)) {
+      return parseExpiresAt(Number(trimmed));
+    }
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+function parseExpiresInSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (NUMERIC_STRING_RE.test(trimmed)) {
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+function parseTokenStateObject(
+  payload: Record<string, unknown>,
+  source: SensorTokenSource,
+): SensorTokenState | null {
+  const tokenRaw = payload.token ?? payload.api_token ?? payload.access_token;
+  if (typeof tokenRaw !== "string") {
+    return null;
+  }
+  const token = tokenRaw.trim();
+  if (token.length === 0) {
+    return null;
+  }
+
+  let expiresAt = parseExpiresAt(
+    payload.expires_at ??
+      payload.expiresAt ??
+      payload.token_expires_at ??
+      payload.tokenExpiresAt ??
+      payload.exp ??
+      payload.expiry,
+  );
+
+  if (!expiresAt) {
+    const expiresIn = parseExpiresInSeconds(payload.expires_in ?? payload.expiresIn);
+    if (expiresIn != null) {
+      expiresAt = new Date(Date.now() + expiresIn * 1000);
+    }
+  }
+
+  return { token, expiresAt, source };
+}
+
+function parseTokenStateJson(raw: string, source: SensorTokenSource): SensorTokenState | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "object" || parsed === null) {
+      return null;
+    }
+    return parseTokenStateObject(parsed as Record<string, unknown>, source);
+  } catch {
+    return null;
+  }
+}
+
+function readTokenStateFromFile(path: string): SensorTokenState | null {
+  try {
+    const raw = fs.readFileSync(path, "utf8");
+    return parseTokenStateJson(raw, "state_file");
+  } catch {
+    return null;
+  }
 }
 
 function buildActionContext(): ActionContext {
@@ -148,6 +268,46 @@ function buildSensorContext(): SensorContext {
   const packRef = parts.length >= 2 ? parts[0] : "";
   const apiUrl = process.env.ATTUNE_API_URL ?? "http://localhost:8080";
   const apiToken = process.env.ATTUNE_API_TOKEN ?? "";
+  const tokenStatePath = process.env.ATTUNE_SENSOR_TOKEN_STATE_PATH || undefined;
+  const tokenStateFromEnv = process.env.ATTUNE_SENSOR_TOKEN_STATE || undefined;
+  let lastKnownState: SensorTokenState = {
+    token: apiToken,
+    expiresAt: parseExpiresAt(process.env.ATTUNE_API_TOKEN_EXPIRES_AT),
+    source: apiToken ? "env" : "none",
+  };
+
+  const getTokenState = (): SensorTokenState => {
+    if (tokenStatePath) {
+      const stateFromFile = readTokenStateFromFile(tokenStatePath);
+      if (stateFromFile) {
+        lastKnownState = stateFromFile;
+        return stateFromFile;
+      }
+    }
+
+    const inlineStateRaw = process.env.ATTUNE_SENSOR_TOKEN_STATE ?? tokenStateFromEnv;
+    if (inlineStateRaw) {
+      const stateFromEnv = parseTokenStateJson(inlineStateRaw, "state_env");
+      if (stateFromEnv) {
+        lastKnownState = stateFromEnv;
+        return stateFromEnv;
+      }
+    }
+
+    const envToken = process.env.ATTUNE_API_TOKEN ?? "";
+    if (envToken.length > 0) {
+      lastKnownState = {
+        token: envToken,
+        expiresAt: parseExpiresAt(process.env.ATTUNE_API_TOKEN_EXPIRES_AT),
+        source: "env",
+      };
+      return lastKnownState;
+    }
+
+    return lastKnownState;
+  };
+
+  const getApiToken = (): string => getTokenState().token;
 
   const prefix = "ATTUNE_SENSOR_CONFIG_";
   const config: Record<string, string> = {};
@@ -162,12 +322,15 @@ function buildSensorContext(): SensorContext {
     sensorId: process.env.ATTUNE_SENSOR_ID ?? "0",
     apiUrl,
     apiToken,
+    tokenStatePath,
     notifierWsUrl: process.env.ATTUNE_NOTIFIER_WS_URL || undefined,
     logLevel: (process.env.ATTUNE_LOG_LEVEL ?? "info").toUpperCase(),
     packRef,
     config,
+    getApiToken,
+    getTokenState,
     get client(): Client {
-      return getSensorClient(apiUrl, apiToken);
+      return getSensorClient(apiUrl, getApiToken);
     },
   });
 }

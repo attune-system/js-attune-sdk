@@ -23,7 +23,11 @@
  *   runSensor(TempSensor);
  */
 
-import { sensorContext, type SensorContext } from "./context.js";
+import {
+  sensorContext,
+  type SensorContext,
+  type SensorTokenState,
+} from "./context.js";
 import WebSocket from "ws";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +51,9 @@ type NormalizedRuleEventType = "created" | "enabled" | "disabled" | "deleted" | 
 type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 const LOG_LEVELS: Record<LogLevel, number> = { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 };
+const DEFAULT_TOKEN_ROTATION_SKEW_MS = 30_000;
+const PROACTIVE_ROTATION_CLOSE_CODE = 4001;
+const PROACTIVE_ROTATION_REASON = "sensor token rotation";
 
 class Logger {
   private level: number;
@@ -95,7 +102,6 @@ export class Sensor {
   readonly logger: Logger;
   protected _shutdownRequested = false;
   protected _rules: Map<number, RuleState> = new Map();
-  private _httpHeaders: Record<string, string> | null = null;
 
   constructor() {
     this.logger = new Logger(
@@ -124,14 +130,26 @@ export class Sensor {
   // HTTP helpers
   // ------------------------------------------------------------------
 
-  private getHttpHeaders(): Record<string, string> {
-    if (!this._httpHeaders) {
-      this._httpHeaders = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.context.apiToken}`,
-      };
+  private getCurrentTokenState(): SensorTokenState {
+    if (typeof this.context.getTokenState === "function") {
+      return this.context.getTokenState();
     }
-    return this._httpHeaders;
+    return {
+      token: this.context.apiToken ?? "",
+      expiresAt: null,
+      source: this.context.apiToken ? "env" : "none",
+    };
+  }
+
+  private getHttpHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const token = this.getCurrentTokenState().token;
+    if (token.length > 0) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
   }
 
   // ------------------------------------------------------------------
@@ -382,17 +400,30 @@ export class Sensor {
       return;
     }
 
+    const tokenState = this.getCurrentTokenState();
+    if (!tokenState.token) {
+      this.logger.warn("Notifier token unavailable; skipping connection attempt");
+      return;
+    }
+
+    const rotationSkewMs = resolveTokenRotationSkewMs();
+
     await new Promise<void>((resolve, reject) => {
       let connected = false;
       let settled = false;
+      let proactiveRotationTimer: ReturnType<typeof setTimeout> | null = null;
       const ws = new WebSocket(notifierWsUrl, {
-        headers: { Authorization: `Bearer ${this.context.apiToken}` },
+        headers: { Authorization: `Bearer ${tokenState.token}` },
       });
       this._notifierConnection = ws;
 
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;
+        if (proactiveRotationTimer) {
+          clearTimeout(proactiveRotationTimer);
+          proactiveRotationTimer = null;
+        }
         if (this._notifierConnection === ws) {
           this._notifierConnection = null;
         }
@@ -405,6 +436,20 @@ export class Sensor {
 
       ws.on("open", () => {
         connected = true;
+        if (tokenState.expiresAt) {
+          const reconnectAt = tokenState.expiresAt.getTime() - rotationSkewMs;
+          const delay = Math.max(0, reconnectAt - Date.now());
+          proactiveRotationTimer = setTimeout(() => {
+            if (!this._shutdownRequested && ws.readyState === WebSocket.OPEN) {
+              this.logger.info("Reconnecting notifier before token expiry", {
+                token_source: tokenState.source,
+                expires_at: tokenState.expiresAt?.toISOString(),
+              });
+              ws.close(PROACTIVE_ROTATION_CLOSE_CODE, PROACTIVE_ROTATION_REASON);
+            }
+          }, delay);
+        }
+
         for (const filter of filters) {
           ws.send(JSON.stringify({ type: "subscribe", filter }));
         }
@@ -434,6 +479,9 @@ export class Sensor {
             code,
             ...(closeReason ? { reason: closeReason } : {}),
           });
+          if (code === 4401) {
+            this.logger.info("Notifier requested reconnect due to token expiry");
+          }
         }
         finish();
       });
@@ -486,6 +534,18 @@ export class Sensor {
 
     return 0;
   }
+}
+
+function resolveTokenRotationSkewMs(): number {
+  const raw = process.env.ATTUNE_SENSOR_TOKEN_ROTATION_SKEW_SECONDS;
+  if (!raw) {
+    return DEFAULT_TOKEN_ROTATION_SKEW_MS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_TOKEN_ROTATION_SKEW_MS;
+  }
+  return Math.floor(parsed * 1000);
 }
 
 // ---------------------------------------------------------------------------

@@ -14,26 +14,43 @@
 export interface AttuneClientOptions {
   apiUrl?: string;
   apiToken?: string;
+  /**
+   * Optional token accessor. Use this for managed sensors where the runtime may
+   * rotate ATTUNE_API_TOKEN externally.
+   */
+  apiTokenProvider?: () => string | undefined;
   timeout?: number;
 }
 
 export class AttuneClient {
   readonly apiUrl: string;
-  readonly apiToken: string;
+  private readonly tokenProvider: () => string;
   private readonly timeout: number;
 
   constructor(options: AttuneClientOptions = {}) {
     this.apiUrl = (
       options.apiUrl ?? process.env.ATTUNE_API_URL ?? "http://localhost:8080"
     ).replace(/\/+$/, "");
-    this.apiToken = options.apiToken ?? process.env.ATTUNE_API_TOKEN ?? "";
+    if (options.apiTokenProvider) {
+      this.tokenProvider = () => options.apiTokenProvider?.() ?? "";
+    } else if (options.apiToken !== undefined) {
+      const fixedToken = options.apiToken;
+      this.tokenProvider = () => fixedToken;
+    } else {
+      this.tokenProvider = () => process.env.ATTUNE_API_TOKEN ?? "";
+    }
     this.timeout = options.timeout ?? 30_000;
+  }
+
+  get apiToken(): string {
+    return this.tokenProvider();
   }
 
   private headers(): Record<string, string> {
     const h: Record<string, string> = { "Content-Type": "application/json" };
-    if (this.apiToken) {
-      h["Authorization"] = `Bearer ${this.apiToken}`;
+    const token = this.tokenProvider();
+    if (token) {
+      h["Authorization"] = `Bearer ${token}`;
     }
     return h;
   }

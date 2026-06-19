@@ -1,8 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+const SENSOR_TOKEN_STATE_PATH = path.join(
+  process.cwd(),
+  "tests",
+  ".sensor-token-state.test.json",
+);
+
+function cleanupTokenStateFile(): void {
+  if (fs.existsSync(SENSOR_TOKEN_STATE_PATH)) {
+    fs.unlinkSync(SENSOR_TOKEN_STATE_PATH);
+  }
+}
 
 describe("ActionContext", () => {
   beforeEach(() => {
     vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    cleanupTokenStateFile();
   });
 
   it("reads env vars", async () => {
@@ -56,6 +76,12 @@ describe("SensorContext", () => {
     vi.resetModules();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    cleanupTokenStateFile();
+  });
+
   it("reads env vars", async () => {
     vi.stubEnv("ATTUNE_SENSOR_REF", "mypack.my_sensor");
     vi.stubEnv("ATTUNE_SENSOR_ID", "7");
@@ -84,5 +110,94 @@ describe("SensorContext", () => {
     expect(ctx.config.target_url).toBe("http://example.com");
 
     vi.unstubAllEnvs();
+  });
+
+  it("re-reads ATTUNE_API_TOKEN dynamically", async () => {
+    vi.stubEnv("ATTUNE_SENSOR_REF", "test.sensor");
+    vi.stubEnv("ATTUNE_API_TOKEN", "token-v1");
+
+    const { _buildSensorContext } = await import("../src/context.js");
+    const ctx = _buildSensorContext();
+
+    expect(ctx.getApiToken()).toBe("token-v1");
+
+    vi.stubEnv("ATTUNE_API_TOKEN", "token-v2");
+    expect(ctx.getApiToken()).toBe("token-v2");
+    expect(ctx.getTokenState().source).toBe("env");
+  });
+
+  it("reads rotated token state from runtime file source", async () => {
+    vi.stubEnv("ATTUNE_SENSOR_REF", "test.sensor");
+    vi.stubEnv("ATTUNE_API_TOKEN", "fallback-env-token");
+    vi.stubEnv("ATTUNE_SENSOR_TOKEN_STATE_PATH", SENSOR_TOKEN_STATE_PATH);
+
+    fs.writeFileSync(
+      SENSOR_TOKEN_STATE_PATH,
+      JSON.stringify({
+        token: "file-token-v1",
+        expires_at: "2030-01-01T00:00:00Z",
+      }),
+      "utf8",
+    );
+
+    const { _buildSensorContext } = await import("../src/context.js");
+    const ctx = _buildSensorContext();
+
+    expect(ctx.getApiToken()).toBe("file-token-v1");
+    expect(ctx.getTokenState().source).toBe("state_file");
+    expect(ctx.getTokenState().expiresAt?.toISOString()).toBe("2030-01-01T00:00:00.000Z");
+
+    fs.writeFileSync(
+      SENSOR_TOKEN_STATE_PATH,
+      JSON.stringify({
+        token: "file-token-v2",
+        expires_at: "2030-01-02T00:00:00Z",
+      }),
+      "utf8",
+    );
+
+    expect(ctx.getApiToken()).toBe("file-token-v2");
+    expect(ctx.getTokenState().expiresAt?.toISOString()).toBe("2030-01-02T00:00:00.000Z");
+  });
+
+  it("falls back safely when configured token source is unavailable", async () => {
+    vi.stubEnv("ATTUNE_SENSOR_REF", "test.sensor");
+    vi.stubEnv("ATTUNE_API_TOKEN", "env-fallback-token");
+    vi.stubEnv("ATTUNE_SENSOR_TOKEN_STATE_PATH", path.join(process.cwd(), "tests", ".missing-token-state.json"));
+
+    const { _buildSensorContext } = await import("../src/context.js");
+    const ctx = _buildSensorContext();
+
+    expect(ctx.getApiToken()).toBe("env-fallback-token");
+    expect(ctx.getTokenState().source).toBe("env");
+  });
+
+  it("sensor client uses latest token for authenticated API requests", async () => {
+    vi.stubEnv("ATTUNE_SENSOR_REF", "test.sensor");
+    vi.stubEnv("ATTUNE_API_TOKEN", "token-a");
+
+    const fetchMock = vi.fn(async (request: Request) => {
+      return new Response(
+        JSON.stringify({ data: { items: [] } }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { _buildSensorContext } = await import("../src/context.js");
+    const { listPacks } = await import("../src/api_client/index.js");
+    const ctx = _buildSensorContext();
+
+    await listPacks({ client: ctx.client });
+    vi.stubEnv("ATTUNE_API_TOKEN", "token-b");
+    await listPacks({ client: ctx.client });
+
+    const firstRequest = fetchMock.mock.calls[0][0] as Request;
+    const secondRequest = fetchMock.mock.calls[1][0] as Request;
+    expect(firstRequest.headers.get("Authorization")).toBe("Bearer token-a");
+    expect(secondRequest.headers.get("Authorization")).toBe("Bearer token-b");
   });
 });

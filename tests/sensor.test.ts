@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { Sensor, PollingSensor, AsyncPollingSensor } from "../src/sensor.js";
 import type { RuleState } from "../src/sensor.js";
 
@@ -21,6 +21,10 @@ describe("RuleState", () => {
 });
 
 describe("Sensor base", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("shutdown sets flag", () => {
     const sensor = new Sensor();
     expect(sensor.isShuttingDown).toBe(false);
@@ -130,6 +134,32 @@ describe("Sensor base", () => {
     });
 
     expect(sensor._getManagedTriggerFilters()).toEqual(["trigger_ref:pack.trigger"]);
+  });
+
+  it("emit re-reads token for each API call", async () => {
+    const sensor = new Sensor();
+    let currentToken = "token-1";
+    const baseContext = (sensor as any).context;
+    (sensor as any).context = {
+      ...baseContext,
+      apiUrl: "http://localhost:8080",
+      getTokenState: () => ({ token: currentToken, expiresAt: null, source: "env" }),
+    };
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: { id: 1 } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sensor.emit({ value: 1 });
+    currentToken = "token-2";
+    await sensor.emit({ value: 2 });
+
+    const firstHeaders = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
+    const secondHeaders = fetchMock.mock.calls[1][1]?.headers as Record<string, string>;
+    expect(firstHeaders.Authorization).toBe("Bearer token-1");
+    expect(secondHeaders.Authorization).toBe("Bearer token-2");
   });
 });
 

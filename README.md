@@ -115,6 +115,22 @@ Managed sensors bootstrap their active rules from `ATTUNE_SENSOR_TRIGGERS`, then
 listen for live rule lifecycle updates from `ATTUNE_NOTIFIER_WS_URL` using the
 existing `ATTUNE_API_TOKEN`. The SDK subscribes to `trigger_ref:<ref>` filters
 for the managed trigger refs it bootstrapped.
+Cross-SDK runtime/platform behavior is documented in
+[docs/managed-sensor-token-rotation-contract.md](docs/managed-sensor-token-rotation-contract.md).
+
+For managed-sensor token rotation, the SDK can re-read token state from:
+
+- `ATTUNE_SENSOR_TOKEN_STATE_PATH` (JSON file)
+- `ATTUNE_SENSOR_TOKEN_STATE` (inline JSON)
+
+Supported JSON keys include `token` (or `api_token` / `access_token`) plus
+optional expiry metadata (`expires_at`, `expiresIn`, `exp`, etc.). When expiry
+metadata is present, notifier connections proactively reconnect before expiry
+(default skew: 30s, configurable via `ATTUNE_SENSOR_TOKEN_ROTATION_SKEW_SECONDS`).
+If token-state metadata is missing or unreadable, the SDK safely falls back to
+`ATTUNE_API_TOKEN`.
+For the canonical cross-SDK JSON shape, precedence, and failure semantics, see
+[docs/managed-sensor-token-rotation-contract.md](docs/managed-sensor-token-rotation-contract.md).
 
 ### Polling Sensor (`PollingSensor`)
 
@@ -236,8 +252,12 @@ class StatefulSensor extends PollingSensor {
 | `ATTUNE_SENSOR_ID` | Sensor database ID |
 | `ATTUNE_API_URL` | API base URL |
 | `ATTUNE_API_TOKEN` | Sensor-scoped API token |
+| `ATTUNE_API_TOKEN_EXPIRES_AT` | Optional token expiry timestamp/epoch used when no token-state JSON source is configured |
 | `ATTUNE_NOTIFIER_WS_URL` | Notifier WebSocket URL for live managed-rule updates |
 | `ATTUNE_SENSOR_TRIGGERS` | Bootstrap JSON array of managed rule bindings |
+| `ATTUNE_SENSOR_TOKEN_STATE_PATH` | Optional path to runtime-managed JSON token state |
+| `ATTUNE_SENSOR_TOKEN_STATE` | Optional inline JSON token state (`token` + optional expiry metadata) |
+| `ATTUNE_SENSOR_TOKEN_ROTATION_SKEW_SECONDS` | Optional proactive reconnect skew before token expiry (default: `30`) |
 | `ATTUNE_LOG_LEVEL` | Log verbosity |
 
 ## Development
