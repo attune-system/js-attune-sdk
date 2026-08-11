@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "description": "Node.js SDK for building Attune actions and sensors",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/attune-system/js-attune-sdk.git"
+  },
+  "homepage": "https://github.com/attune-system/js-attune-sdk#readme",
+  "bugs": "https://github.com/attune-system/js-attune-sdk/issues",
   "keywords": [
     "attune",
     "automation",
@@ -29,11 +35,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/fix-generated-esm.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
-    "generate-client": "./scripts/generate-client.sh"
+    "prepack": "npm run build",
+    "test:package": "node scripts/package-smoke.mjs",
+    "generate-client": "./scripts/generate-client.sh",
+    "generate-client:check": "./scripts/generate-client.sh --check ../attune.wiki/openapi.json"
   },
   "engines": {
     "node": ">=18"
@@ -41,11 +50,15 @@
   "dependencies": {
     "ws": "^8.18.3"
   },
+  "overrides": {
+    "js-yaml": "4.3.1"
+  },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.97.2",
+    "@hey-api/openapi-ts": "0.97.3",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.18.1",
     "typescript": "^5.4.0",
-    "vitest": "^3.0.0"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
   }
 }

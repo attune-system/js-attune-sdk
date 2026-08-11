@@ -10,7 +10,7 @@
  *
  * Quick start — polling:
  *
- *   import { PollingSensor, runSensor } from "attune";
+ *   import { PollingSensor, runSensor } from "attune-sdk";
  *
  *   class TempSensor extends PollingSensor {
  *     interval = 5000;
@@ -44,6 +44,14 @@ export interface RuleState {
 
 type NormalizedRuleEventType = "created" | "enabled" | "disabled" | "deleted" | "updated";
 
+interface CurrentRuleDetails {
+  id: number;
+  ref: string;
+  trigger_ref: string;
+  trigger_params: Record<string, unknown>;
+  enabled: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Logger (structured JSON to stderr)
 // ---------------------------------------------------------------------------
@@ -54,6 +62,8 @@ const LOG_LEVELS: Record<LogLevel, number> = { DEBUG: 10, INFO: 20, WARN: 30, ER
 const DEFAULT_TOKEN_ROTATION_SKEW_MS = 30_000;
 const PROACTIVE_ROTATION_CLOSE_CODE = 4001;
 const PROACTIVE_ROTATION_REASON = "sensor token rotation";
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const NOTIFIER_CONNECT_TIMEOUT_MS = 10_000;
 
 class Logger {
   private level: number;
@@ -160,7 +170,15 @@ export class Sensor {
     payload: Record<string, unknown>,
     options: EmitOptions = {},
   ): Promise<number | null> {
-    const { rule, triggerRef, targetRule = false } = options;
+    const { rule, triggerRef } = options;
+    const targetRule = rule !== undefined && options.targetRule !== false;
+
+    if (targetRule && !isValidRuleId(rule.ruleId)) {
+      this.logger.error("Cannot target event: rule ID must be a positive safe integer", {
+        rule_id: rule.ruleId,
+      });
+      return null;
+    }
 
     const resolvedTriggerRef =
       triggerRef ?? rule?.triggerRef ?? this.context.sensorRef;
@@ -170,11 +188,8 @@ export class Sensor {
       payload,
       source: this.context.sensorRef,
     };
-    if (rule) {
-      body.trigger_instance_id = `rule_${rule.ruleRef}`;
-      if (targetRule) {
-        body.rule_ref = rule.ruleRef;
-      }
+    if (rule && targetRule) {
+      body.trigger_instance_id = `rule_${rule.ruleId}`;
     }
 
     try {
@@ -253,18 +268,44 @@ export class Sensor {
   // Rule management
   // ------------------------------------------------------------------
 
-  _handleRuleMessage(message: Record<string, unknown>): void {
+  async _handleRuleMessage(message: Record<string, unknown>): Promise<void> {
     const eventType = normalizeRuleEventType(message.event_type);
     if (!eventType) return;
     const rawRuleId = message.rule_id;
     if (rawRuleId == null) return;
 
-    const ruleId = Number(rawRuleId);
-    if (Number.isNaN(ruleId)) return;
-    const ruleRef = (message.rule_ref as string) ?? `rule_${ruleId}`;
-    const triggerRef = (message.trigger_ref as string) ?? (message.trigger_type as string) ?? "";
-    const triggerParams = toRecord(message.trigger_params) ?? toRecord(message.config) ?? {};
-    const active = typeof message.active === "boolean" ? message.active : undefined;
+    const ruleId = parseRuleId(rawRuleId);
+    if (ruleId === null) {
+      this.logger.warn("Ignoring rule lifecycle message with invalid rule ID");
+      return;
+    }
+    const existing = this._rules.get(ruleId);
+    let ruleRef = typeof message.rule_ref === "string" && message.rule_ref.length > 0
+      ? message.rule_ref
+      : existing?.ruleRef ?? `rule_${ruleId}`;
+    let triggerRef = typeof message.trigger_ref === "string"
+      ? message.trigger_ref
+      : typeof message.trigger_type === "string"
+        ? message.trigger_type
+        : existing?.triggerRef ?? "";
+    const deferred = message.auth_mode === "deferred";
+    let suppliedTriggerParams = toRecord(message.trigger_params) ?? toRecord(message.config);
+    let active = typeof message.active === "boolean" ? message.active : undefined;
+
+    if (
+      deferred &&
+      suppliedTriggerParams == null &&
+      eventType !== "disabled" &&
+      eventType !== "deleted"
+    ) {
+      const fetched = await this._fetchCurrentRule(ruleRef, ruleId);
+      if (!fetched) return;
+      ruleRef = fetched.ref;
+      triggerRef = fetched.trigger_ref;
+      suppliedTriggerParams = fetched.trigger_params;
+      active = fetched.enabled;
+    }
+    const triggerParams = suppliedTriggerParams ?? existing?.triggerParams ?? {};
 
     if (eventType === "created" || eventType === "enabled") {
       const rule: RuleState = {
@@ -274,7 +315,6 @@ export class Sensor {
         triggerParams,
         enabled: active ?? true,
       };
-      const existing = this._rules.get(ruleId);
       this._rules.set(ruleId, rule);
 
       if (existing && JSON.stringify(existing.triggerParams) !== JSON.stringify(triggerParams)) {
@@ -295,7 +335,6 @@ export class Sensor {
       this._rules.delete(ruleId);
       if (rule) this.onRuleDeleted(rule);
     } else if (eventType === "updated") {
-      const existing = this._rules.get(ruleId);
       if (existing) {
         const oldParams = { ...existing.triggerParams };
         existing.ruleRef = ruleRef;
@@ -319,19 +358,72 @@ export class Sensor {
     }
   }
 
-  _handleNotifierEnvelope(data: WebSocket.RawData): void {
+  private async _fetchCurrentRule(ruleRef: string, ruleId: number): Promise<CurrentRuleDetails | null> {
+    if (!ruleRef || ruleRef === `rule_${ruleId}`) {
+      this.logger.warn("Cannot refetch deferred rule lifecycle message without a rule reference", {
+        rule_id: ruleId,
+      });
+      return null;
+    }
+
+    const token = this.getCurrentTokenState().token;
+    if (!token) {
+      this.logger.warn("Cannot refetch deferred rule lifecycle message without an API token", {
+        rule_id: ruleId,
+        rule_ref: ruleRef,
+      });
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${this.context.apiUrl}/api/v1/rules/${encodeURIComponent(ruleRef)}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const payload = toRecord(await response.json());
+      const rule = toRecord(payload?.data);
+      if (
+        !rule ||
+        rule.id !== ruleId ||
+        typeof rule.ref !== "string" ||
+        typeof rule.trigger_ref !== "string" ||
+        typeof rule.enabled !== "boolean" ||
+        !toRecord(rule.trigger_params)
+      ) {
+        this.logger.warn("Refetched deferred rule details did not match the lifecycle message", {
+          rule_id: ruleId,
+          rule_ref: ruleRef,
+        });
+        return null;
+      }
+      return rule as unknown as CurrentRuleDetails;
+    } catch (err) {
+      this.logger.warn("Failed to refetch deferred rule lifecycle details", {
+        rule_id: ruleId,
+        rule_ref: ruleRef,
+        error: String(err),
+      });
+      return null;
+    }
+  }
+
+  async _handleNotifierEnvelope(data: WebSocket.RawData): Promise<void> {
     const message = extractRuleLifecycleMessage(data);
     if (!message) return;
-    this._handleRuleMessage(message);
+    await this._handleRuleMessage(message);
   }
 
   _getManagedTriggerFilters(): string[] {
-    return [...new Set(
-      [...this._rules.values()]
-        .map((rule) => rule.triggerRef)
-        .filter((triggerRef) => triggerRef.length > 0)
-        .map((triggerRef) => `trigger_ref:${triggerRef}`),
-    )];
+    const declaredTriggerRefs = parseStringArray(process.env.ATTUNE_SENSOR_TRIGGER_TYPES);
+    const triggerRefs = declaredTriggerRefs.length > 0
+      ? declaredTriggerRefs
+      : [...this._rules.values()].map((rule) => rule.triggerRef);
+    return [...new Set(triggerRefs
+      .map((triggerRef) => triggerRef.trim())
+      .filter((triggerRef) => triggerRef.length > 0)
+      .map((triggerRef) => `trigger_ref:${triggerRef}`))];
   }
 
   _bootstrapRules(): void {
@@ -364,6 +456,8 @@ export class Sensor {
   // ------------------------------------------------------------------
 
   private _notifierConnection: WebSocket | null = null;
+  private _notifierLoop: Promise<void> | null = null;
+  private _notifierMessageQueue: Promise<void> = Promise.resolve();
 
   async _startNotifierConsumer(): Promise<boolean> {
     const notifierWsUrl = this.context.notifierWsUrl;
@@ -372,7 +466,14 @@ export class Sensor {
       return false;
     }
 
-    this._notifierConsumeLoop(notifierWsUrl).catch((err) => {
+    try {
+      validateNotifierUrl(notifierWsUrl);
+    } catch (err) {
+      this.logger.error(`Notifier WebSocket disabled: ${err}`);
+      return false;
+    }
+
+    this._notifierLoop = this._notifierConsumeLoop(notifierWsUrl).catch((err) => {
       this.logger.warn(`Notifier loop exited: ${err}`);
     });
     return true;
@@ -388,7 +489,7 @@ export class Sensor {
         this._notifierConnection = null;
       }
       if (!this._shutdownRequested) {
-        await sleep(5000);
+        await interruptibleShutdownSleep(5000, () => this._shutdownRequested);
       }
     }
   }
@@ -406,12 +507,11 @@ export class Sensor {
       return;
     }
 
-    const rotationSkewMs = resolveTokenRotationSkewMs();
-
     await new Promise<void>((resolve, reject) => {
       let connected = false;
       let settled = false;
       let proactiveRotationTimer: ReturnType<typeof setTimeout> | null = null;
+      let connectTimer: ReturnType<typeof setTimeout> | null = null;
       const ws = new WebSocket(notifierWsUrl, {
         headers: { Authorization: `Bearer ${tokenState.token}` },
       });
@@ -424,6 +524,10 @@ export class Sensor {
           clearTimeout(proactiveRotationTimer);
           proactiveRotationTimer = null;
         }
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = null;
+        }
         if (this._notifierConnection === ws) {
           this._notifierConnection = null;
         }
@@ -434,10 +538,19 @@ export class Sensor {
         }
       };
 
+      connectTimer = setTimeout(() => {
+        ws.terminate();
+        finish(new Error("notifier connection timed out"));
+      }, NOTIFIER_CONNECT_TIMEOUT_MS);
+
       ws.on("open", () => {
         connected = true;
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = null;
+        }
         if (tokenState.expiresAt) {
-          const reconnectAt = tokenState.expiresAt.getTime() - rotationSkewMs;
+          const reconnectAt = tokenState.expiresAt.getTime() - DEFAULT_TOKEN_ROTATION_SKEW_MS;
           const delay = Math.max(0, reconnectAt - Date.now());
           proactiveRotationTimer = setTimeout(() => {
             if (!this._shutdownRequested && ws.readyState === WebSocket.OPEN) {
@@ -460,16 +573,17 @@ export class Sensor {
       });
 
       ws.on("message", (data: WebSocket.RawData) => {
-        try {
-          this._handleNotifierEnvelope(data);
-        } catch (err) {
-          this.logger.warn(`Invalid notifier message: ${err}`);
-        }
+        this._notifierMessageQueue = this._notifierMessageQueue
+          .then(() => this._handleNotifierEnvelope(data))
+          .catch((err) => {
+            this.logger.warn(`Invalid notifier message: ${err}`);
+          });
       });
 
       ws.on("error", (err: Error) => {
         this.logger.warn(`Notifier socket error: ${err.message}`);
-        if (!connected) finish(err);
+        ws.terminate();
+        finish(err);
       });
 
       ws.on("close", (code: number, reason: Buffer) => {
@@ -492,17 +606,24 @@ export class Sensor {
   // Signal handling
   // ------------------------------------------------------------------
 
-  private _installSignalHandlers(): void {
+  private _installSignalHandlers(): () => void {
     const handler = (signal: string) => {
       this.logger.info(`Received ${signal}, shutting down`);
-      this._shutdownRequested = true;
+      this.shutdown();
     };
-    process.on("SIGTERM", () => handler("SIGTERM"));
-    process.on("SIGINT", () => handler("SIGINT"));
+    const onSigterm = () => handler("SIGTERM");
+    const onSigint = () => handler("SIGINT");
+    process.on("SIGTERM", onSigterm);
+    process.on("SIGINT", onSigint);
+    return () => {
+      process.off("SIGTERM", onSigterm);
+      process.off("SIGINT", onSigint);
+    };
   }
 
   shutdown(): void {
     this._shutdownRequested = true;
+    this._notifierConnection?.close();
   }
 
   // ------------------------------------------------------------------
@@ -510,7 +631,7 @@ export class Sensor {
   // ------------------------------------------------------------------
 
   async _runLifecycle(): Promise<number> {
-    this._installSignalHandlers();
+    const removeSignalHandlers = this._installSignalHandlers();
 
     try {
       this._bootstrapRules();
@@ -523,7 +644,17 @@ export class Sensor {
       return 1;
     } finally {
       this._shutdownRequested = true;
-      this._notifierConnection?.close();
+      removeSignalHandlers();
+      const notifierConnection = this._notifierConnection;
+      notifierConnection?.close();
+      if (this._notifierLoop) {
+        await Promise.race([this._notifierLoop, sleep(1000)]);
+        this._notifierLoop = null;
+      }
+      if (notifierConnection && this._notifierConnection === notifierConnection && notifierConnection.readyState !== WebSocket.CLOSED) {
+        notifierConnection.terminate();
+        this._notifierConnection = null;
+      }
       try {
         await this.cleanup();
       } catch (err) {
@@ -536,18 +667,6 @@ export class Sensor {
   }
 }
 
-function resolveTokenRotationSkewMs(): number {
-  const raw = process.env.ATTUNE_SENSOR_TOKEN_ROTATION_SKEW_SECONDS;
-  if (!raw) {
-    return DEFAULT_TOKEN_ROTATION_SKEW_MS;
-  }
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return DEFAULT_TOKEN_ROTATION_SKEW_MS;
-  }
-  return Math.floor(parsed * 1000);
-}
-
 // ---------------------------------------------------------------------------
 // PollingSensor — setInterval-based per-rule polling
 // ---------------------------------------------------------------------------
@@ -557,23 +676,17 @@ export class PollingSensor extends Sensor {
   interval = 5000;
 
   private _pollTimers: Map<number, ReturnType<typeof setInterval>> = new Map();
+  private _running = false;
 
   /** Called periodically for each active rule. Override to check for events. */
   async poll(_rule: RuleState): Promise<void> {}
 
   protected _getRuleInterval(rule: RuleState): number {
-    const params = rule.triggerParams;
-    for (const key of ["interval", "interval_seconds", "poll_interval"]) {
-      const val = params[key];
-      if (val != null) {
-        const num = Number(val);
-        if (!isNaN(num)) return num;
-      }
-    }
-    return this.interval;
+    return resolvePollingInterval(rule.triggerParams, this.interval);
   }
 
   private _startPollTimer(rule: RuleState): void {
+    if (!this._running) return;
     this._stopPollTimer(rule.ruleId);
     const interval = this._getRuleInterval(rule);
     const timer = setInterval(async () => {
@@ -612,6 +725,10 @@ export class PollingSensor extends Sensor {
   }
 
   async run(): Promise<void> {
+    this._running = true;
+    for (const rule of this._rules.values()) {
+      if (rule.enabled) this._startPollTimer(rule);
+    }
     while (!this.isShuttingDown) {
       await sleep(500);
     }
@@ -640,15 +757,7 @@ export class AsyncPollingSensor extends Sensor {
   async poll(_rule: RuleState): Promise<void> {}
 
   protected _getRuleInterval(rule: RuleState): number {
-    const params = rule.triggerParams;
-    for (const key of ["interval", "interval_seconds", "poll_interval"]) {
-      const val = params[key];
-      if (val != null) {
-        const num = Number(val);
-        if (!isNaN(num)) return num;
-      }
-    }
-    return this.interval;
+    return resolvePollingInterval(rule.triggerParams, this.interval);
   }
 
   private _startPollTask(rule: RuleState): void {
@@ -738,6 +847,83 @@ function interruptibleSleep(ms: number, signal: AbortSignal): Promise<void> {
     const timer = setTimeout(resolve, ms);
     signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
   });
+}
+
+function interruptibleShutdownSleep(ms: number, isShuttingDown: () => boolean): Promise<void> {
+  return new Promise((resolve) => {
+    const poll = setInterval(() => {
+      if (isShuttingDown()) {
+        clearInterval(poll);
+        clearTimeout(timer);
+        resolve();
+      }
+    }, Math.min(100, ms));
+    const timer = setTimeout(() => {
+      clearInterval(poll);
+      resolve();
+    }, ms);
+  });
+}
+
+function isValidRuleId(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+function parseRuleId(value: unknown): number | null {
+  if (typeof value !== "number" && (typeof value !== "string" || !/^\d+$/.test(value))) {
+    return null;
+  }
+  const parsed = Number(value);
+  return isValidRuleId(parsed) ? parsed : null;
+}
+
+function resolvePollingInterval(params: Record<string, unknown>, fallback: number): number {
+  for (const [key, multiplier] of [["interval", 1], ["interval_seconds", 1000], ["poll_interval", 1]] as const) {
+    if (params[key] == null) continue;
+    const interval = Number(params[key]) * multiplier;
+    return isValidTimerDelay(interval) ? interval : normalizeTimerFallback(fallback);
+  }
+  return normalizeTimerFallback(fallback);
+}
+
+function isValidTimerDelay(value: number): boolean {
+  return Number.isFinite(value) && value > 0 && value <= MAX_TIMER_DELAY_MS;
+}
+
+function normalizeTimerFallback(value: number): number {
+  return isValidTimerDelay(value) ? value : 5000;
+}
+
+function parseStringArray(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function validateNotifierUrl(rawUrl: string): void {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error("ATTUNE_NOTIFIER_WS_URL must be a valid URL");
+  }
+  if (url.username || url.password) {
+    throw new Error("ATTUNE_NOTIFIER_WS_URL must not contain credentials");
+  }
+  if (url.protocol === "wss:") return;
+  if (url.protocol !== "ws:") {
+    throw new Error("ATTUNE_NOTIFIER_WS_URL must use wss:// or ws://");
+  }
+  const allowInsecure = process.env.ATTUNE_ALLOW_INSECURE_NOTIFIER_WS === "true";
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const loopback = hostname === "localhost" || hostname === "::1" || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+  if (!allowInsecure && !loopback) {
+    throw new Error("non-loopback ws:// requires ATTUNE_ALLOW_INSECURE_NOTIFIER_WS=true");
+  }
 }
 
 function normalizeRuleEventType(eventType: unknown): NormalizedRuleEventType | null {

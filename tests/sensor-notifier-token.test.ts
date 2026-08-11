@@ -46,6 +46,11 @@ class MockWebSocket extends EventEmitter {
     closeCalls.push({ code, reason: decodedReason });
     queueMicrotask(() => this.emit("close", code ?? 1000, Buffer.from(decodedReason)));
   }
+
+  terminate(): void {
+    this.readyState = MockWebSocket.CLOSED;
+    queueMicrotask(() => this.emit("close", 1006, Buffer.alloc(0)));
+  }
 }
 
 vi.mock("ws", () => ({ default: MockWebSocket }));
@@ -98,7 +103,7 @@ describe("Sensor notifier token handling", () => {
       getTokenState: () => ({
         token: "token-expiring",
         expiresAt: new Date(Date.now() + 1_000),
-        source: "state_file",
+        source: "env",
       }),
     };
 
@@ -123,7 +128,7 @@ describe("Sensor notifier token handling", () => {
     (sensor as any).context = {
       ...baseContext,
       notifierWsUrl: "ws://notifier:8081/ws",
-      getTokenState: () => ({ token: "token-no-expiry", expiresAt: null, source: "state_file" }),
+      getTokenState: () => ({ token: "token-no-expiry", expiresAt: null, source: "env" }),
     };
 
     sensor._handleRuleMessage({
@@ -160,5 +165,22 @@ describe("Sensor notifier token handling", () => {
 
     await (sensor as any)._connectNotifier("ws://notifier:8081/ws");
     expect(connectionCalls).toHaveLength(0);
+  });
+
+  it("rejects non-loopback plaintext notifier URLs unless explicitly allowed", async () => {
+    const { Sensor } = await import("../src/sensor.js");
+    const sensor = new Sensor();
+    const baseContext = (sensor as any).context;
+    (sensor as any).context = {
+      ...baseContext,
+      notifierWsUrl: "ws://notifier.example/ws",
+    };
+
+    await expect(sensor._startNotifierConsumer()).resolves.toBe(false);
+    expect(connectionCalls).toHaveLength(0);
+
+    vi.stubEnv("ATTUNE_ALLOW_INSECURE_NOTIFIER_WS", "true");
+    await expect(sensor._startNotifierConsumer()).resolves.toBe(true);
+    sensor.shutdown();
   });
 });

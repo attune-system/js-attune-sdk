@@ -2,7 +2,7 @@
  * Action runner — handles stdin parameter parsing, output formatting, and error handling.
  *
  * Usage:
- *   import { runAction } from "attune";
+ *   import { runAction } from "attune-sdk";
  *
  *   function main(params: { name: string; count?: number }) {
  *     return { greeting: `Hello, ${params.name}!`.repeat(params.count ?? 1) };
@@ -15,7 +15,8 @@
  * - 1: failure (error details written to stdout as JSON with `success: false`)
  */
 
-export type ActionFn = (params: Record<string, unknown>) => unknown | Promise<unknown>;
+export type ActionFn<TParams extends Record<string, unknown> = Record<string, unknown>> =
+  (params: TParams) => unknown | Promise<unknown>;
 
 /** Read action parameters from stdin (JSON format). */
 export async function readParams(): Promise<Record<string, unknown>> {
@@ -52,14 +53,14 @@ export interface RunActionOptions {
  *
  * The entrypoint function receives the full params object parsed from stdin JSON.
  */
-export async function runAction(
-  entrypoint: ActionFn,
+export async function runAction<TParams extends Record<string, unknown>>(
+  entrypoint: ActionFn<TParams>,
   options: RunActionOptions = {},
 ): Promise<void> {
   const { catchExceptions = true } = options;
 
   try {
-    const params = await readParams();
+    const params = await readParams() as TParams;
     const result = await entrypoint(params);
     emitResult(result ?? {});
     process.exit(0);

@@ -3,17 +3,17 @@
  *
  * Quick start for actions:
  *
- *   import attune from "attune";
+ *   import { runAction } from "attune-sdk";
  *
  *   function main(params: { name: string; count?: number }) {
  *     return { greeting: `Hello, ${params.name}!`.repeat(params.count ?? 1) };
  *   }
  *
- *   attune.runAction(main);
+ *   runAction(main);
  *
  * Quick start for sensors:
  *
- *   import { PollingSensor, runSensor, RuleState } from "attune";
+ *   import { PollingSensor, runSensor, RuleState } from "attune-sdk";
  *
  *   class MySensor extends PollingSensor {
  *     interval = 5000;
@@ -26,7 +26,7 @@
  *
  * Access execution context anywhere:
  *
- *   import { context, sensorContext } from "attune";
+ *   import { context, sensorContext } from "attune-sdk";
  *   console.log(context.executionId);      // action context
  *   console.log(sensorContext.sensorRef);  // sensor context
  */

@@ -1,11 +1,11 @@
-# attune — Node.js SDK for Attune Actions & Sensors
+# attune-sdk - Node.js SDK for Attune Actions and Sensors
 
 A lightweight TypeScript package providing boilerplate for writing [Attune](https://github.com/attune-system/attune) actions and sensors.
 
 ## Installation
 
 ```bash
-npm install attune
+npm install attune-sdk
 ```
 
 ## Writing Actions
@@ -14,7 +14,7 @@ Actions receive parameters as JSON on stdin and output results as JSON on stdout
 This package handles all of that:
 
 ```typescript
-import { runAction } from "attune";
+import { runAction } from "attune-sdk";
 
 function main(params: { name: string; count?: number }) {
   return { greeting: `Hello, ${params.name}!`.repeat(params.count ?? 1) };
@@ -30,7 +30,7 @@ Your function receives the full params object parsed from stdin JSON.
 The context is a module-level singleton available anywhere after import:
 
 ```typescript
-import { context, runAction } from "attune";
+import { context, runAction } from "attune-sdk";
 
 function main(params: { url: string; method?: string }) {
   return { action: context.actionRef, exec_id: context.executionId };
@@ -46,10 +46,10 @@ Both `context` (actions) and `sensorContext` (sensors) expose a `.client`
 property that is pre-configured with the execution-scoped API token:
 
 ```typescript
-import { context, runAction } from "attune";
-import { listPacks, getExecution } from "attune/api_client";
+import { context, runAction } from "attune-sdk";
+import { listPacks, getExecution } from "attune-sdk/api_client";
 
-async function main(params: { executionId: string }) {
+async function main(params: { executionId: number }) {
   // Use the pre-authenticated client from context
   const packs = await listPacks({ client: context.client });
   const exec = await getExecution({
@@ -65,8 +65,8 @@ runAction(main);
 The client is also available in sensor context:
 
 ```typescript
-import { sensorContext } from "attune";
-import { listSensors } from "attune/api_client";
+import { sensorContext } from "attune-sdk";
+import { listSensors } from "attune-sdk/api_client";
 
 const sensors = await listSensors({ client: sensorContext.client });
 ```
@@ -74,11 +74,32 @@ const sensors = await listSensors({ client: sensorContext.client });
 You can also create a standalone client instance for custom configurations:
 
 ```typescript
-import { createClient } from "attune";
+import { createClient } from "attune-sdk";
 
 const client = createClient({
   baseUrl: "http://localhost:8080",
   headers: { Authorization: "Bearer my-token" },
+});
+```
+
+Generated operations take a single options object. Path, query, and JSON body
+values remain separate:
+
+```typescript
+import { createEvent, getKey, installPack } from "attune-sdk/api_client";
+
+const key = await getKey({
+  client,
+  path: { ref: "deploy-token" },
+  query: { decrypt: true },
+});
+await installPack({
+  client,
+  body: { source: "https://github.com/example/pack.git", no_registry: true },
+});
+await createEvent({
+  client,
+  body: { trigger_ref: "monitor.alert", payload: { severity: "high" } },
 });
 ```
 
@@ -87,7 +108,7 @@ const client = createClient({
 A simpler HTTP client is also available for ad-hoc requests:
 
 ```typescript
-import { AttuneClient } from "attune/client";
+import { AttuneClient } from "attune-sdk/client";
 
 const client = new AttuneClient(); // reads ATTUNE_API_URL and ATTUNE_API_TOKEN from env
 const data = await client.get("/api/v1/artifacts", { params: { execution: "42" } });
@@ -103,41 +124,35 @@ delivery for managed rule updates out of the box.
 The sensor context is a module-level singleton, accessible anywhere:
 
 ```typescript
-import { sensorContext } from "attune";
+import { sensorContext } from "attune-sdk";
 
 console.log(sensorContext.sensorRef);
 console.log(sensorContext.apiUrl);
 console.log(sensorContext.notifierWsUrl);
-console.log(sensorContext.config); // ATTUNE_SENSOR_CONFIG_* vars
+console.log(sensorContext.config); // explicitly supplied ATTUNE_SENSOR_CONFIG_* vars
 ```
 
 Managed sensors bootstrap their active rules from `ATTUNE_SENSOR_TRIGGERS`, then
 listen for live rule lifecycle updates from `ATTUNE_NOTIFIER_WS_URL` using the
-existing `ATTUNE_API_TOKEN`. The SDK subscribes to `trigger_ref:<ref>` filters
-for the managed trigger refs it bootstrapped.
-Cross-SDK runtime/platform behavior is documented in
-[docs/managed-sensor-token-rotation-contract.md](docs/managed-sensor-token-rotation-contract.md).
+current `ATTUNE_API_TOKEN`. When `ATTUNE_SENSOR_TRIGGER_TYPES` is available, the
+SDK subscribes to every declared trigger type; older runtimes fall back to the
+trigger refs in the active-rule snapshot. Non-loopback plaintext `ws://` URLs
+are rejected unless `ATTUNE_ALLOW_INSECURE_NOTIFIER_WS=true` is explicitly set.
 
-For managed-sensor token rotation, the SDK can re-read token state from:
+The managed runtime renews sensor credentials by restarting the process. The
+SDK does not refresh tokens or write token-state files.
 
-- `ATTUNE_SENSOR_TOKEN_STATE_PATH` (JSON file)
-- `ATTUNE_SENSOR_TOKEN_STATE` (inline JSON)
-
-Supported JSON keys include `token` (or `api_token` / `access_token`) plus
-optional expiry metadata (`expires_at`, `expiresIn`, `exp`, etc.). When expiry
-metadata is present, notifier connections proactively reconnect before expiry
-(default skew: 30s, configurable via `ATTUNE_SENSOR_TOKEN_ROTATION_SKEW_SECONDS`).
-If token-state metadata is missing or unreadable, the SDK safely falls back to
-`ATTUNE_API_TOKEN`.
-For the canonical cross-SDK JSON shape, precedence, and failure semantics, see
-[docs/managed-sensor-token-rotation-contract.md](docs/managed-sensor-token-rotation-contract.md).
+Persisted sensor `config` is not injected into managed child processes. Put
+rule-specific values in trigger parameters. `sensorContext.config` contains
+only `ATTUNE_SENSOR_CONFIG_*` variables explicitly supplied by a custom runtime
+or process launcher; do not use plain environment variables for secrets.
 
 ### Polling Sensor (`PollingSensor`)
 
 One interval timer per active rule:
 
 ```typescript
-import { PollingSensor, runSensor, RuleState } from "attune";
+import { PollingSensor, runSensor, RuleState } from "attune-sdk";
 
 class TemperatureSensor extends PollingSensor {
   interval = 5000; // ms
@@ -146,7 +161,7 @@ class TemperatureSensor extends PollingSensor {
     const device = (rule.triggerParams.device as string) ?? "/dev/temp0";
     const temp = readTemperature(device);
     if (temp > 100) {
-      this.emit({ temperature: temp, alert: true }, { rule });
+      await this.emit({ temperature: temp, alert: true }, { rule });
     }
   }
 }
@@ -154,12 +169,22 @@ class TemperatureSensor extends PollingSensor {
 runSensor(TemperatureSensor);
 ```
 
+Passing `{ rule }` targets that numeric rule ID by default and sends
+`trigger_instance_id: "rule_<id>"`. Use `{ rule, targetRule: false }` only when
+the event should be broadcast to every matching rule for the trigger. Targeted
+emission rejects non-positive, fractional, or unsafe JavaScript integer IDs.
+
+`interval` and `poll_interval` trigger parameters are milliseconds;
+`interval_seconds` is converted from seconds to milliseconds. Invalid,
+non-positive, non-finite, or unsupported timer delays fall back to the class
+`interval`.
+
 ### Async Polling (`AsyncPollingSensor`)
 
 One async loop per active rule (ideal for I/O-bound checks):
 
 ```typescript
-import { AsyncPollingSensor, runSensor, RuleState } from "attune";
+import { AsyncPollingSensor, runSensor, RuleState } from "attune-sdk";
 
 class ApiSensor extends AsyncPollingSensor {
   interval = 10000; // ms
@@ -168,7 +193,7 @@ class ApiSensor extends AsyncPollingSensor {
     const url = rule.triggerParams.url as string;
     const resp = await fetch(url);
     if (resp.status >= 500) {
-      this.emit({ url, status: resp.status }, { rule });
+      await this.emit({ url, status: resp.status }, { rule });
     }
   }
 }
@@ -181,14 +206,16 @@ runSensor(ApiSensor);
 For non-polling sensors, override `run()`:
 
 ```typescript
-import { Sensor, runSensor } from "attune";
+import { Sensor, runSensor } from "attune-sdk";
 import { watch } from "fs";
 
 class FileWatchSensor extends Sensor {
   async run() {
-    const path = this.config.watch_path ?? "/var/log/app.log";
+    const path = typeof this.config.watch_path === "string"
+      ? this.config.watch_path
+      : "/var/log/app.log";
     const watcher = watch(path, () => {
-      this.emit({ path, event: "change" });
+      void this.emit({ path, event: "change" });
     });
     while (!this.isShuttingDown) {
       await new Promise((r) => setTimeout(r, 1000));
@@ -241,6 +268,7 @@ class StatefulSensor extends PollingSensor {
 | `ATTUNE_API_URL` | API base URL |
 | `ATTUNE_API_TOKEN` | Execution-scoped API token (optional) |
 | `ATTUNE_ARTIFACTS_DIR` | Shared artifact volume path |
+| `ATTUNE_RUNTIME_ENVS_DIR` | Runtime environments root |
 | `ATTUNE_RULE` | Rule reference (if rule-triggered) |
 | `ATTUNE_TRIGGER` | Trigger reference (if event-triggered) |
 
@@ -250,20 +278,25 @@ class StatefulSensor extends PollingSensor {
 |----------|-------------|
 | `ATTUNE_SENSOR_REF` | Sensor reference |
 | `ATTUNE_SENSOR_ID` | Sensor database ID |
+| `ATTUNE_PACK_REF` | Pack reference |
 | `ATTUNE_API_URL` | API base URL |
 | `ATTUNE_API_TOKEN` | Sensor-scoped API token |
-| `ATTUNE_API_TOKEN_EXPIRES_AT` | Optional token expiry timestamp/epoch used when no token-state JSON source is configured |
 | `ATTUNE_NOTIFIER_WS_URL` | Notifier WebSocket URL for live managed-rule updates |
+| `ATTUNE_ALLOW_INSECURE_NOTIFIER_WS` | Allow non-loopback plaintext `ws://` only on a trusted development network (default: `false`) |
+| `ATTUNE_SENSOR_TRIGGER_TYPES` | JSON array of every trigger ref declared by the sensor, used for complete notifier subscriptions |
 | `ATTUNE_SENSOR_TRIGGERS` | Bootstrap JSON array of managed rule bindings |
-| `ATTUNE_SENSOR_TOKEN_STATE_PATH` | Optional path to runtime-managed JSON token state |
-| `ATTUNE_SENSOR_TOKEN_STATE` | Optional inline JSON token state (`token` + optional expiry metadata) |
-| `ATTUNE_SENSOR_TOKEN_ROTATION_SKEW_SECONDS` | Optional proactive reconnect skew before token expiry (default: `30`) |
+| `ATTUNE_ARTIFACTS_DIR` | Shared artifact volume path |
 | `ATTUNE_LOG_LEVEL` | Log verbosity |
+| `ATTUNE_LOG_FORMAT` | Runtime-selected log format |
+
+Legacy `ATTUNE_MQ_URL` and `ATTUNE_MQ_EXCHANGE` values may also be present, but
+this package does not depend on `amqplib`; managed lifecycle delivery uses the
+notifier WebSocket.
 
 ## Development
 
 ```bash
-cd packs.external/node-attune
+cd js-attune-sdk
 npm install
 npm run build
 npm test
@@ -281,6 +314,9 @@ npm run generate-client
 
 # From a local spec file
 ./scripts/generate-client.sh /path/to/openapi.json
+
+# Verify checked-in output without replacing it
+npm run generate-client:check
 
 # From a custom API URL
 ATTUNE_API_URL=http://my-host:8080 npm run generate-client

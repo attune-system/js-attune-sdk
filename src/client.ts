@@ -5,7 +5,7 @@
  * built-in fetch (available since Node 18).
  *
  * Usage:
- *   import { AttuneClient } from "attune/client";
+ *   import { AttuneClient } from "attune-sdk/client";
  *
  *   const client = new AttuneClient(); // auto-reads ATTUNE_API_URL and ATTUNE_API_TOKEN
  *   const artifacts = await client.get("/api/v1/artifacts", { params: { execution: "42" } });

@@ -4,6 +4,8 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:8080' | 'https://api.attune.example.com' | (string & {});
 };
 
+export type ActionReferenceVisibility = 'public' | 'private' | 'restricted';
+
 /**
  * Response DTO for action information
  */
@@ -29,6 +31,10 @@ export type ActionResponse = {
      * Action description
      */
     description?: string | null;
+    /**
+     * Whether this action is enabled
+     */
+    enabled: boolean;
     /**
      * Entry point
      */
@@ -75,6 +81,14 @@ export type ActionResponse = {
      */
     ref: string;
     /**
+     * Pack refs allowed to reference this action when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    /**
+     * Pack-level visibility for references from rules, workflows, and queues.
+     */
+    reference_visibility: ActionReferenceVisibility;
+    /**
      * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
      */
     required_worker_runtimes?: {
@@ -92,6 +106,10 @@ export type ActionResponse = {
      * Semver version constraint for the runtime (e.g., ">=3.12", ">=3.12,<4.0", "~18.0")
      */
     runtime_version_constraint?: string | null;
+    /**
+     * Default execution timeout (seconds) snapshotted onto executions of this action.
+     */
+    timeout_seconds?: number | null;
     /**
      * Last update timestamp
      */
@@ -147,6 +165,10 @@ export type ActionSearchHit = {
      */
     ref: string;
     /**
+     * Pack-level visibility for references from rules, workflows, and queues.
+     */
+    reference_visibility: ActionReferenceVisibility;
+    /**
      * Runtime reference (e.g., "core.python"). None for workflow actions.
      */
     runtime_ref?: string | null;
@@ -178,6 +200,10 @@ export type ActionSummary = {
      */
     description?: string | null;
     /**
+     * Whether this action is enabled
+     */
+    enabled: boolean;
+    /**
      * Entry point
      */
     entrypoint: string;
@@ -203,6 +229,14 @@ export type ActionSummary = {
      */
     ref: string;
     /**
+     * Pack refs allowed to reference this action when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    /**
+     * Pack-level visibility for references from rules, workflows, and queues.
+     */
+    reference_visibility: ActionReferenceVisibility;
+    /**
      * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
      */
     required_worker_runtimes?: {
@@ -220,6 +254,10 @@ export type ActionSummary = {
      * Semver version constraint for the runtime
      */
     runtime_version_constraint?: string | null;
+    /**
+     * Default execution timeout (seconds) snapshotted onto executions of this action.
+     */
+    timeout_seconds?: number | null;
     /**
      * Last update timestamp
      */
@@ -277,6 +315,79 @@ export type AgentBinaryInfo = {
 };
 
 /**
+ * Request DTO for the upsert-and-allocate endpoint.
+ *
+ * Looks up an artifact by ref (creating it if it doesn't exist), then
+ * allocates a new file-backed version and returns the `file_path` where
+ * the caller should write the file on the shared artifact volume.
+ *
+ * This replaces the multi-step create → 409-handling → allocate dance
+ * with a single API call.
+ */
+export type AllocateFileVersionByRefRequest = {
+    /**
+     * MIME content type for this version (e.g. "text/plain")
+     */
+    content_type?: string | null;
+    /**
+     * Who created this version (e.g. action ref, identity, "system")
+     */
+    created_by?: string | null;
+    /**
+     * Optional description
+     */
+    description?: string | null;
+    /**
+     * Execution ID to link this artifact to
+     */
+    execution?: number | null;
+    /**
+     * Free-form metadata about this version
+     */
+    meta?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Human-readable name
+     */
+    name?: string | null;
+    /**
+     * Owner identifier (ref string of the owning entity)
+     */
+    owner?: string | null;
+    /**
+     * Retention limit (default: 10)
+     */
+    retention_limit?: number | null;
+    retention_policy?: null | RetentionPolicyType;
+    scope?: null | OwnerType;
+    type?: null | ArtifactType;
+    visibility?: null | ArtifactVisibility;
+};
+
+/**
+ * Information about an analyzed pack
+ */
+export type AnalyzedPack = {
+    /**
+     * Number of dependencies
+     */
+    dependency_count: number;
+    /**
+     * Whether pack has dependencies
+     */
+    has_dependencies: boolean;
+    /**
+     * Pack directory path
+     */
+    pack_path: string;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+};
+
+/**
  * Standard API response wrapper
  */
 export type ApiResponseActionResponse = {
@@ -305,6 +416,10 @@ export type ApiResponseActionResponse = {
          * Action description
          */
         description?: string | null;
+        /**
+         * Whether this action is enabled
+         */
+        enabled: boolean;
         /**
          * Entry point
          */
@@ -351,6 +466,14 @@ export type ApiResponseActionResponse = {
          */
         ref: string;
         /**
+         * Pack refs allowed to reference this action when visibility is restricted.
+         */
+        reference_allowed_pack_refs?: Array<string>;
+        /**
+         * Pack-level visibility for references from rules, workflows, and queues.
+         */
+        reference_visibility: ActionReferenceVisibility;
+        /**
          * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
          */
         required_worker_runtimes?: {
@@ -368,6 +491,10 @@ export type ApiResponseActionResponse = {
          * Semver version constraint for the runtime (e.g., ">=3.12", ">=3.12,<4.0", "~18.0")
          */
         runtime_version_constraint?: string | null;
+        /**
+         * Default execution timeout (seconds) snapshotted onto executions of this action.
+         */
+        timeout_seconds?: number | null;
         /**
          * Last update timestamp
          */
@@ -390,6 +517,24 @@ export type ApiResponseActionResponse = {
          * Workflow definition ID (non-null if this action is a workflow)
          */
         workflow_def?: number | null;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseApplyWorkQueueItemsResponse = {
+    data: {
+        affected_count: number;
+        items: Array<WorkQueueItemResponse>;
+        matched_count: number;
+        operation: WorkQueueItemBulkOperation;
+        preview_count: number;
+        skipped_count: number;
     };
     /**
      * Optional message
@@ -561,6 +706,48 @@ export type ApiResponseAuthSettingsResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseBuildPackEnvsResponse = {
+    /**
+     * Response DTO for build pack environments operation
+     */
+    data: {
+        /**
+         * Successfully built environments
+         */
+        built_environments: Array<BuiltEnvironment>;
+        /**
+         * Failed environment builds
+         */
+        failed_environments: Array<FailedEnvironment>;
+        /**
+         * Summary statistics
+         */
+        summary: BuildSummary;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseBulkEnqueueWorkQueueItemsResponse = {
+    data: {
+        created_count: number;
+        items: Array<WorkQueueItemResponse>;
+        updated_count: number;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseCurrentUserResponse = {
     /**
      * Current user response
@@ -599,6 +786,87 @@ export type ApiResponseCurrentUserResponse = {
          */
         login: string;
         provider_profile?: null | ProviderProfileResponse;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseDashboardMetadataResponse = {
+    data: {
+        created: string;
+        description?: string | null;
+        enabled: boolean;
+        id: number;
+        is_adhoc: boolean;
+        is_default_home: boolean;
+        label: string;
+        owner_identity?: number | null;
+        pack?: number | null;
+        ref: string;
+        revision: number;
+        scope_ref: string;
+        scope_type: DashboardScopeType;
+        spec: {
+            [key: string]: unknown;
+        };
+        spec_version: number;
+        tags: Array<string>;
+        updated: string;
+        visibility: DashboardVisibility;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseDashboardSourceCatalogResponse = {
+    data: {
+        contracts: Array<DashboardSourceContractResponse>;
+        source: string;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseDownloadPacksResponse = {
+    /**
+     * Response DTO for download packs operation
+     */
+    data: {
+        /**
+         * Successfully downloaded packs
+         */
+        downloaded_packs: Array<DownloadedPack>;
+        /**
+         * Failed pack downloads
+         */
+        failed_packs: Array<FailedPack>;
+        /**
+         * Number of failed downloads
+         */
+        failure_count: number;
+        /**
+         * Number of successful downloads
+         */
+        success_count: number;
+        /**
+         * Total number of packs requested
+         */
+        total_count: number;
     };
     /**
      * Optional message
@@ -659,6 +927,10 @@ export type ApiResponseEnforcementResponse = {
          */
         status: EnforcementStatus;
         /**
+         * Trace tag associated to this enforcement via linked executions.
+         */
+        trace_tag?: string | null;
+        /**
          * Trigger reference
          */
         trigger_ref: string;
@@ -696,7 +968,7 @@ export type ApiResponseEventResponse = {
          */
         payload: {
             [key: string]: unknown;
-        };
+        } | null;
         rule?: null | I64;
         /**
          * Rule reference (if event was generated by a specific rule)
@@ -707,6 +979,10 @@ export type ApiResponseEventResponse = {
          * Source reference
          */
         source_ref?: string | null;
+        /**
+         * Optional source trace tag attached at event creation.
+         */
+        trace_tag?: string | null;
         trigger?: null | I64;
         /**
          * Trigger reference
@@ -790,6 +1066,14 @@ export type ApiResponseExecutionResponse = {
          */
         status: ExecutionStatus;
         /**
+         * Resolved execution timeout in seconds, snapshotted at creation time.
+         */
+        timeout_seconds?: number | null;
+        /**
+         * System-wide trace tag for correlating related automatic activity.
+         */
+        trace_tag?: string | null;
+        /**
          * Last update timestamp
          */
         updated: string;
@@ -821,6 +1105,43 @@ export type ApiResponseExecutionResponse = {
         workflow_task?: {
             [key: string]: unknown;
         } | null;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseGetPackDependenciesResponse = {
+    /**
+     * Response DTO for get pack dependencies operation
+     */
+    data: {
+        /**
+         * Packs that were analyzed
+         */
+        analyzed_packs: Array<AnalyzedPack>;
+        /**
+         * All dependencies found
+         */
+        dependencies: Array<PackDependency>;
+        /**
+         * Errors encountered during analysis
+         */
+        errors: Array<DependencyError>;
+        /**
+         * Dependencies not yet installed
+         */
+        missing_dependencies: Array<PackDependency>;
+        /**
+         * Runtime requirements by pack
+         */
+        runtime_requirements: {
+            [key: string]: RuntimeRequirements;
+        };
     };
     /**
      * Optional message
@@ -964,7 +1285,7 @@ export type ApiResponseKeyResponse = {
          */
         updated: string;
         /**
-         * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+         * The value. Encrypted values are null unless explicitly decrypted.
          */
         value: unknown;
     };
@@ -1095,6 +1416,46 @@ export type ApiResponsePermissionAssignmentResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponsePolicyResponse = {
+    data: {
+        concurrency?: null | ConcurrencyPolicyResponse;
+        created: string;
+        description?: string | null;
+        enabled: boolean;
+        id: number;
+        name: string;
+        priority: number;
+        quotas: Array<QuotaPolicyResponse>;
+        rate_limit?: null | RateLimitPolicyResponse;
+        ref: string;
+        scope: PolicyScopeResponse;
+        tags: Array<string>;
+        updated: string;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponsePreviewWorkQueueItemsResponse = {
+    data: {
+        items: Array<WorkQueueItemResponse>;
+        matched_count: number;
+        preview_count: number;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseQueueStatsResponse = {
     /**
      * Response DTO for queue statistics
@@ -1146,6 +1507,33 @@ export type ApiResponseQueueStatsResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseRegisterPacksResponse = {
+    /**
+     * Response DTO for register packs operation
+     */
+    data: {
+        /**
+         * Failed pack registrations
+         */
+        failed_packs: Array<FailedPackRegistration>;
+        /**
+         * Successfully registered packs
+         */
+        registered_packs: Array<RegisteredPack>;
+        /**
+         * Summary statistics
+         */
+        summary: RegistrationSummary;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseRetentionConfig = {
     /**
      * Supervisor-owned runtime retention configuration.
@@ -1159,6 +1547,11 @@ export type ApiResponseRetentionConfig = {
          * Maximum rows to delete per target per cycle for regular tables.
          */
         batch_size?: number;
+        /**
+         * Cache generation/entry retention and freshness maintenance. Persisted
+         * with the runtime retention singleton and reloaded every cycle.
+         */
+        cache_retention?: CacheRetentionConfig;
         /**
          * How often the supervisor runs retention, in seconds.
          */
@@ -1255,6 +1648,10 @@ export type ApiResponseRuleResponse = {
          * Unique reference identifier
          */
         ref: string;
+        /**
+         * Optional template used to resolve execution trace tags for this rule.
+         */
+        trace_tag_template?: string | null;
         /**
          * Trigger ID (null if the referenced trigger has been deleted)
          */
@@ -1419,6 +1816,29 @@ export type ApiResponseString = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseSuccessResponse = {
+    /**
+     * Success message response (for operations that don't return data)
+     */
+    data: {
+        /**
+         * Message describing the operation
+         */
+        message: string;
+        /**
+         * Success indicator
+         */
+        success: boolean;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseTokenResponse = {
     /**
      * Token response
@@ -1441,6 +1861,25 @@ export type ApiResponseTokenResponse = {
          */
         token_type: string;
         user?: null | UserInfo;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseTraceReportResponse = {
+    data: {
+        enforcements: Array<TraceEnforcementSummary>;
+        events: Array<EventSummary>;
+        executions: Array<ExecutionSummary>;
+        origins: Array<string>;
+        queue_dispatches: Array<TraceWorkQueueDispatchSummary>;
+        queue_items: Array<WorkQueueItemResponse>;
+        trace_tag: string;
     };
     /**
      * Optional message
@@ -1504,6 +1943,14 @@ export type ApiResponseTriggerResponse = {
          * Unique reference identifier
          */
         ref: string;
+        /**
+         * Pack refs allowed to subscribe to this trigger when visibility is restricted.
+         */
+        reference_allowed_pack_refs?: Array<string>;
+        /**
+         * Pack-level visibility for rule subscriptions.
+         */
+        reference_visibility: ActionReferenceVisibility;
         /**
          * Sensor ID (optional — webhook triggers have no sensor)
          */
@@ -1621,6 +2068,54 @@ export type ApiResponseVecAuditEventResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseVecDashboardListItemResponse = {
+    data: Array<{
+        description?: string | null;
+        id: number;
+        is_default_home: boolean;
+        label: string;
+        ref: string;
+        revision: number;
+        scope_ref: string;
+        scope_type: DashboardScopeType;
+        tags: Array<string>;
+        updated: string;
+        visibility: DashboardVisibility;
+    }>;
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseVecWorkflowCacheIterationResponse = {
+    data: Array<{
+        batch_size: number;
+        completed_at?: string | null;
+        concurrency: number;
+        created: string;
+        dispatched_count: number;
+        error_summary?: string | null;
+        generation_id: number;
+        namespace_id: number;
+        page_size: number;
+        scanned_count: number;
+        state: WorkflowCacheIterationState;
+        task_name: string;
+        updated: string;
+    }>;
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseWebhookReceiverResponse = {
     /**
      * Response from webhook receiver endpoint
@@ -1681,6 +2176,7 @@ export type ApiResponseWorkQueueItemResponse = {
         requested_by_execution?: null | I64;
         requested_by_identity?: null | I64;
         status: WorkQueueItemStatus;
+        trace_tag?: string | null;
         updated: string;
     };
     /**
@@ -1719,7 +2215,10 @@ export type ApiResponseWorkQueueResponse = {
         pack_ref?: string | null;
         permission_set_refs?: Array<string> | null;
         ref: string;
+        reference_allowed_pack_refs: Array<string>;
+        reference_visibility: ActionReferenceVisibility;
         resolved_dispatch_tuning?: null | ResolvedWorkQueueDispatchTuningResponse;
+        trace_tag_template?: string | null;
         update_strategy: WorkQueueUpdateStrategy;
         updated: string;
     };
@@ -1801,6 +2300,141 @@ export type ApiResponseWorkflowResponse = {
      */
     message?: string | null;
 };
+
+/**
+ * Request DTO for appending to a progress-type artifact
+ */
+export type AppendProgressRequest = {
+    /**
+     * The entry to append to the progress data array.
+     * Can be any JSON value (string, object, number, etc.)
+     */
+    entry: {
+        [key: string]: unknown;
+    };
+};
+
+export type ApplyWorkQueueItemsRequest = {
+    operation: WorkQueueItemBulkOperation;
+    payload_patch: {
+        [key: string]: unknown;
+    } | null;
+    preview_limit?: number;
+    priority?: number | null;
+    selector: WorkQueueItemJsonPathSelector;
+};
+
+export type ApplyWorkQueueItemsResponse = {
+    affected_count: number;
+    items: Array<WorkQueueItemResponse>;
+    matched_count: number;
+    operation: WorkQueueItemBulkOperation;
+    preview_count: number;
+    skipped_count: number;
+};
+
+export type ArtifactClassification = 'general' | 'runtime_log';
+
+export type ArtifactJsonPatch = {
+    op: 'set';
+    value: Value;
+} | {
+    op: 'clear';
+};
+
+export type ArtifactStringPatch = {
+    op: 'set';
+    value: string;
+} | {
+    op: 'clear';
+};
+
+/**
+ * Simplified artifact for list endpoints
+ */
+export type ArtifactSummary = {
+    /**
+     * Classification used to distinguish runtime log artifacts from general artifacts.
+     */
+    classification: ArtifactClassification;
+    /**
+     * MIME content type
+     */
+    content_type?: string | null;
+    /**
+     * Creation timestamp
+     */
+    created: string;
+    /**
+     * Artifact ID
+     */
+    id: number;
+    /**
+     * Human-readable name
+     */
+    name?: string | null;
+    /**
+     * Owner identifier
+     */
+    owner: string;
+    /**
+     * Artifact reference
+     */
+    ref: string;
+    /**
+     * Owner scope
+     */
+    scope: OwnerType;
+    /**
+     * Size of latest version in bytes
+     */
+    size_bytes?: number | null;
+    /**
+     * Artifact type
+     */
+    type: ArtifactType;
+    /**
+     * Last update timestamp
+     */
+    updated: string;
+    /**
+     * Visibility level
+     */
+    visibility: ArtifactVisibility;
+};
+
+export type ArtifactType = 'file_binary' | 'file_datatable' | 'file_image' | 'file_text' | 'other' | 'progress' | 'url';
+
+export type ArtifactVersionByRefUploadForm = {
+    content_type?: string | null;
+    created_by?: string | null;
+    description?: string | null;
+    execution?: string | null;
+    file: Blob | File;
+    meta?: string | null;
+    name?: string | null;
+    owner?: string | null;
+    retention_limit?: string | null;
+    retention_policy?: string | null;
+    scope?: string | null;
+    type?: string | null;
+    visibility?: string | null;
+};
+
+export type ArtifactVersionUploadForm = {
+    content_type?: string | null;
+    created_by?: string | null;
+    file: Blob | File;
+    meta?: string | null;
+};
+
+/**
+ * Visibility level for artifacts.
+ * - `Public`: viewable by all authenticated users on the platform.
+ * - `Private`: restricted based on the artifact's `scope` and `owner` fields.
+ * Full RBAC enforcement is deferred; for now the field enables filtering.
+ */
+export type ArtifactVisibility = 'public' | 'private';
 
 /**
  * Top-level category for an audit event.
@@ -1913,6 +2547,506 @@ export type AuditEventSummary = {
 export type AuditOutcome = 'success' | 'failure' | 'denied';
 
 /**
+ * Error details returned when authentication fails before a route handler runs.
+ */
+export type AuthErrorDetail = {
+    code: number;
+    message: string;
+};
+
+/**
+ * Authentication rejection envelope.
+ */
+export type AuthErrorResponse = {
+    error: AuthErrorDetail;
+};
+
+export type AuthorizationBasis = 'keys' | 'executions' | 'events' | 'enforcements' | 'queues' | 'queue_items' | 'inquiries' | 'workers' | 'sensors' | 'dashboards';
+
+/**
+ * Request DTO for building pack environments
+ */
+export type BuildPackEnvsRequest = {
+    /**
+     * Force rebuild of existing environments
+     */
+    force_rebuild?: boolean;
+    /**
+     * Node.js version to use
+     */
+    nodejs_version?: string;
+    /**
+     * List of pack directory paths
+     */
+    pack_paths: Array<string>;
+    /**
+     * Base directory for permanent pack storage
+     */
+    packs_base_dir?: string | null;
+    /**
+     * Python version to use
+     */
+    python_version?: string;
+    /**
+     * Skip building Node.js environments
+     */
+    skip_nodejs?: boolean;
+    /**
+     * Skip building Python environments
+     */
+    skip_python?: boolean;
+    /**
+     * Timeout in seconds for building each environment
+     */
+    timeout?: number;
+};
+
+/**
+ * Response DTO for build pack environments operation
+ */
+export type BuildPackEnvsResponse = {
+    /**
+     * Successfully built environments
+     */
+    built_environments: Array<BuiltEnvironment>;
+    /**
+     * Failed environment builds
+     */
+    failed_environments: Array<FailedEnvironment>;
+    /**
+     * Summary statistics
+     */
+    summary: BuildSummary;
+};
+
+/**
+ * Build summary statistics
+ */
+export type BuildSummary = {
+    /**
+     * Failed builds
+     */
+    failure_count: number;
+    /**
+     * Node.js environments built
+     */
+    nodejs_envs_built: number;
+    /**
+     * Python environments built
+     */
+    python_envs_built: number;
+    /**
+     * Successfully built
+     */
+    success_count: number;
+    /**
+     * Total duration in milliseconds
+     */
+    total_duration_ms: number;
+    /**
+     * Total packs processed
+     */
+    total_packs: number;
+};
+
+/**
+ * Information about a built environment
+ */
+export type BuiltEnvironment = {
+    /**
+     * Build duration in milliseconds
+     */
+    duration_ms: number;
+    /**
+     * Built environments
+     */
+    environments: Environments;
+    /**
+     * Pack directory path
+     */
+    pack_path: string;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+};
+
+export type BulkEnqueueWorkQueueItemsRequest = {
+    items: Array<EnqueueWorkQueueItemRequest>;
+};
+
+export type BulkEnqueueWorkQueueItemsResponse = {
+    created_count: number;
+    items: Array<WorkQueueItemResponse>;
+    updated_count: number;
+};
+
+/**
+ * A single cache record. Extra descriptive fields beyond `external_id`/`value`
+ * are ignored by minimal clients.
+ */
+export type CacheEntryResponse = {
+    external_id: string;
+    size_bytes: number;
+    source_checksum: string | null;
+    source_updated_at: string | null;
+    value: unknown;
+};
+
+/**
+ * A record inside an upload chunk.
+ */
+export type CacheEntryUpload = {
+    external_id: string;
+    source_checksum?: string | null;
+    source_updated_at?: string | null;
+    value: unknown;
+};
+
+/**
+ * A cache request can be rejected either by the authentication extractor or
+ * by cache RBAC after authentication succeeds.
+ */
+export type CacheForbiddenResponse = AuthErrorResponse | ErrorResponse;
+
+export type CacheGenerationApiResponse = {
+    data: CacheGenerationResponse;
+    message?: string | null;
+};
+
+export type CacheGenerationListApiResponse = {
+    data: CacheGenerationListResponse;
+    message?: string | null;
+};
+
+/**
+ * Wrapper for a generation list.
+ */
+export type CacheGenerationListResponse = {
+    generations: Array<CacheGenerationResponse>;
+    next_cursor: string | null;
+};
+
+/**
+ * Immutable generation metadata. Also serves as the refresh-lifecycle
+ * operation response for create/upload/seal/promote/abandon.
+ */
+export type CacheGenerationResponse = {
+    activated: string | null;
+    checksum: string | null;
+    checksum_algorithm: string | null;
+    client_refresh_id: string;
+    created: string;
+    created_by: null | I64;
+    expected_active_generation_id: null | I64;
+    expected_chunk_count: number;
+    expected_record_count: number | null;
+    expected_size_bytes: number | null;
+    failed: string | null;
+    failure_reason: string | null;
+    /**
+     * Generation identifier (accepted by the client as `generation`/`id`).
+     */
+    generation_id: I64;
+    namespace_id: I64;
+    readable_until: string | null;
+    record_count: number;
+    retired: string | null;
+    sealed: string | null;
+    size_bytes: number;
+    source_revision: string | null;
+    /**
+     * Lifecycle state: `staging`, `ready`, `active`, `retired`, or `failed`.
+     */
+    status: CacheGenerationState;
+};
+
+/**
+ * Lifecycle state for an immutable cache generation.
+ */
+export type CacheGenerationState = 'staging' | 'ready' | 'active' | 'retired' | 'failed';
+
+export type CacheMultiLookupApiResponse = {
+    data: CacheMultiLookupResponse;
+    message?: string | null;
+};
+
+/**
+ * Bounded multi-ID lookup request.
+ */
+export type CacheMultiLookupRequest = {
+    external_ids: Array<string>;
+    generation_id?: null | I64;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
+    require_fresh?: boolean;
+};
+
+/**
+ * Bounded multi-ID lookup response. Missing IDs are reported explicitly.
+ */
+export type CacheMultiLookupResponse = {
+    generation_id: I64;
+    items: Array<CacheEntryResponse>;
+    missing_external_ids: Array<string>;
+    stale: boolean;
+};
+
+export type CacheNamespaceApiResponse = {
+    data: CacheNamespaceResponse;
+    message?: string | null;
+};
+
+export type CacheNamespaceDeletionApiResponse = {
+    data: CacheNamespaceDeletionResponse;
+    message?: string | null;
+};
+
+/**
+ * Tombstone/queued-cleanup status returned by namespace deletion.
+ */
+export type CacheNamespaceDeletionResponse = {
+    /**
+     * Cleanup is asynchronous; entries are reclaimed in bounded batches.
+     */
+    cleanup_pending: boolean;
+    id: I64;
+    namespace: string;
+    status: string;
+    tombstoned: boolean;
+};
+
+export type CacheNamespaceFreshness = 'fresh' | 'stale' | 'unpopulated';
+
+export type CacheNamespaceListApiResponse = {
+    data: CacheNamespaceListResponse;
+    message?: string | null;
+};
+
+/**
+ * Wrapper for a namespace list scoped to one owner.
+ */
+export type CacheNamespaceListResponse = {
+    namespaces: Array<CacheNamespaceResponse>;
+    next_cursor: string | null;
+};
+
+/**
+ * Namespace-level publication policy overrides. Unspecified fields keep their
+ * existing (or default) values.
+ */
+export type CacheNamespacePolicyBody = {
+    freshness_target_seconds?: number | null;
+    max_generation_bytes?: number | null;
+    max_records_per_generation?: number | null;
+    max_retained_bytes?: number | null;
+    /**
+     * Number of published generations retained. At least two are required so
+     * readers can complete traversal of the prior snapshot after promotion.
+     */
+    max_retained_generations?: number | null;
+    max_staging_generations?: number | null;
+};
+
+/**
+ * Namespace metadata and freshness/health summary. Never includes entries.
+ */
+export type CacheNamespaceResponse = {
+    active_generation: null | I64;
+    /**
+     * True when there is no active generation (uninitialized dataset).
+     */
+    cache_not_populated: boolean;
+    created: string;
+    /**
+     * Stable declarative component ref for a pack-managed namespace.
+     */
+    definition_ref: string | null;
+    freshness_target_seconds: number;
+    id: I64;
+    /**
+     * When the active generation was published.
+     */
+    last_refreshed_at: string | null;
+    /**
+     * Whether this namespace is declaratively managed by a pack definition.
+     */
+    managed: boolean;
+    /**
+     * Durable ref of the pack that manages this namespace.
+     */
+    managing_pack_ref: string | null;
+    max_generation_bytes: number;
+    max_records_per_generation: number;
+    max_retained_bytes: number;
+    max_retained_generations: number;
+    max_staging_generations: number;
+    namespace: string;
+    /**
+     * Canonical owner key (`system` or a numeric owner id as text).
+     */
+    owner: string;
+    /**
+     * Owner reference for display, when known.
+     */
+    owner_ref: string | null;
+    owner_type: OwnerType;
+    /**
+     * Active generation record count, when populated.
+     */
+    record_count: number | null;
+    /**
+     * Active generation size in bytes, when populated.
+     */
+    size_bytes: number | null;
+    /**
+     * Active generation source revision, when populated.
+     */
+    source_revision: string | null;
+    /**
+     * True when the active generation's age exceeds the freshness target.
+     */
+    stale: boolean;
+    /**
+     * Whether the namespace is tombstoned and pending bounded cleanup.
+     */
+    tombstoned: boolean;
+    updated: string;
+};
+
+/**
+ * Owner selector accepted in cache request bodies.
+ *
+ * `owner_ref` is the pack/action/sensor reference; it is omitted for the
+ * `system` scope and resolved to the authenticated identity for `identity`.
+ */
+export type CacheOwnerBody = {
+    owner_ref?: string | null;
+    owner_type: OwnerType;
+};
+
+export type CachePointLookupApiResponse = {
+    data: CachePointLookupResponse;
+    message?: string | null;
+};
+
+/**
+ * Point lookup request. Identifiers are placed in the body to avoid access-log
+ * leakage.
+ */
+export type CachePointLookupRequest = {
+    external_id: string;
+    generation_id?: null | I64;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
+    require_fresh?: boolean;
+};
+
+/**
+ * Point lookup response. `item = None` is an authorized miss.
+ */
+export type CachePointLookupResponse = {
+    generation_id: I64;
+    item: null | CacheEntryResponse;
+    stale: boolean;
+};
+
+/**
+ * Supervisor-owned cache generation/entry retention configuration.
+ *
+ * Persisted as the `cache_retention` JSON object on
+ * `runtime_retention_config`, exposed through the retention API, and reloaded
+ * at the start of every supervisor cycle. Cache cleanup runs as a distinct
+ * step inside the existing retention cycle and reuses its advisory lock and
+ * cadence rather than electing a second leader.
+ */
+export type CacheRetentionConfig = {
+    /**
+     * Suppress duplicate cache alerts sharing a correlation id for this long.
+     */
+    alert_cooldown_seconds?: number;
+    /**
+     * Maximum cache alerts emitted per supervisor cycle.
+     */
+    alert_limit_per_cycle?: number;
+    /**
+     * Maximum `cache_entry` rows deleted per bounded batch call.
+     */
+    batch_size?: number;
+    /**
+     * Report cleanup candidates and metrics without deleting rows.
+     */
+    dry_run?: boolean;
+    /**
+     * Enable cache generation/entry cleanup as part of the retention cycle.
+     */
+    enabled?: boolean;
+    /**
+     * Extra grace beyond a namespace's own `freshness_target_seconds` before
+     * a stale active generation is treated as alert-worthy.
+     */
+    freshness_alert_grace_seconds?: number;
+    /**
+     * Emit a `core.alert` when a namespace's active generation exceeds its
+     * freshness target, or a namespace repeatedly fails to publish a
+     * staging generation.
+     */
+    freshness_alerts_enabled?: boolean;
+    /**
+     * Maximum entry-deletion batches performed for a single cleanup-candidate
+     * generation within one supervisor cycle. Bounds how long a single
+     * high-cardinality generation can dominate a cycle; entries are always
+     * deleted in indexed bounded batches before the generation row itself.
+     */
+    max_batches_per_generation?: number;
+    /**
+     * Maximum cleanup-candidate generations (failed, or retired past
+     * `readable_until`) processed in a single supervisor cycle.
+     */
+    max_generations_per_cycle?: number;
+    /**
+     * Maximum namespaces inspected for staging expiry/freshness per cycle,
+     * and maximum tombstoned-and-emptied namespaces deleted per cycle.
+     */
+    max_namespaces_per_cycle?: number;
+    /**
+     * Minimum time a retired generation remains readable after retirement.
+     * Enforced defensively by the supervisor in addition to the generation's
+     * own stored `readable_until`, so cleanup never races a traversal that
+     * began while the generation was still active.
+     */
+    min_traversal_window_seconds?: number;
+    /**
+     * Unpublished staging or ready generations older than this many seconds
+     * are treated as abandoned; the supervisor marks them `failed` so the
+     * normal cleanup path reclaims them.
+     */
+    staging_expiry_seconds?: number;
+    /**
+     * Consecutive staging failures observed for the same namespace within
+     * the freshness lookback before a repeated-failure alert is emitted.
+     */
+    staging_failure_alert_threshold?: number;
+};
+
+export type CacheScanPageApiResponse = {
+    data: CacheScanPageResponse;
+    message?: string | null;
+};
+
+/**
+ * One generation-pinned scan page.
+ */
+export type CacheScanPageResponse = {
+    cursor_expires_at: string | null;
+    generation_id: I64;
+    items: Array<CacheEntryResponse>;
+    next_cursor: string | null;
+    record_count: number | null;
+    stale: boolean;
+};
+
+/**
  * Change password request
  */
 export type ChangePasswordRequest = {
@@ -1924,6 +3058,66 @@ export type ChangePasswordRequest = {
      * New password
      */
     new_password: string;
+};
+
+export type CloneDashboardRequest = {
+    ref: string;
+};
+
+/**
+ * Component counts
+ */
+export type ComponentCounts = {
+    /**
+     * Number of actions
+     */
+    actions: number;
+    /**
+     * Number of policies
+     */
+    policies: number;
+    /**
+     * Number of rules
+     */
+    rules: number;
+    /**
+     * Number of sensors
+     */
+    sensors: number;
+    /**
+     * Number of triggers
+     */
+    triggers: number;
+    /**
+     * Number of workflows
+     */
+    workflows: number;
+};
+
+/**
+ * Component summary (action, sensor, trigger, etc.)
+ */
+export type ComponentSummary = {
+    /**
+     * Brief description
+     */
+    description: string;
+    /**
+     * Component name
+     */
+    name: string;
+};
+
+export type ConcurrencyPolicyRequest = {
+    limit: number;
+    method: PolicyMethod;
+    parameters?: Array<string>;
+};
+
+export type ConcurrencyPolicyResponse = {
+    limit: number;
+    method: PolicyMethod;
+    parameters: Array<string>;
 };
 
 export type CordonWorkerRequest = {
@@ -1953,6 +3147,10 @@ export type CreateActionRequest = {
      * Action description
      */
     description?: string | null;
+    /**
+     * Whether this action is enabled. Omitted defaults to true.
+     */
+    enabled?: boolean | null;
     /**
      * Entry point for action execution (e.g., path to script, function name)
      */
@@ -1987,6 +3185,11 @@ export type CreateActionRequest = {
      */
     ref: string;
     /**
+     * Pack refs allowed to reference this action when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    reference_visibility?: null | ActionReferenceVisibility;
+    /**
      * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
      */
     required_worker_runtimes?: {
@@ -2005,6 +3208,12 @@ export type CreateActionRequest = {
      */
     runtime_version_constraint?: string | null;
     /**
+     * Optional default execution timeout in seconds for executions of this action.
+     * When omitted, executions fall back to the app-level
+     * `default_execution_timeout_seconds`.
+     */
+    timeout_seconds?: number | null;
+    /**
      * Required/preferred worker label affinity and required anti-affinity.
      */
     worker_affinity?: WorkerAffinity;
@@ -2018,6 +3227,216 @@ export type CreateActionRequest = {
      * Tolerations that allow scheduling onto workers with matching taints.
      */
     worker_tolerations?: Array<WorkerToleration>;
+};
+
+/**
+ * Request DTO for creating a new artifact
+ */
+export type CreateArtifactRequest = {
+    /**
+     * MIME content type (e.g. "text/plain", "application/json")
+     */
+    content_type?: string | null;
+    /**
+     * Initial structured data (for progress-type artifacts or metadata)
+     */
+    data?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Optional description
+     */
+    description?: string | null;
+    /**
+     * Human-readable name
+     */
+    name?: string | null;
+    /**
+     * Owner identifier (ref string of the owning entity)
+     */
+    owner: string;
+    /**
+     * Artifact reference (unique identifier, e.g. "build.log", "test.results")
+     */
+    ref: string;
+    /**
+     * Retention limit (number of versions, days, hours, or minutes depending on policy).
+     * If omitted, execution/action/sensor defaults may apply.
+     */
+    retention_limit?: number | null;
+    retention_policy?: null | RetentionPolicyType;
+    /**
+     * Owner scope type
+     */
+    scope: OwnerType;
+    /**
+     * Artifact type
+     */
+    type: ArtifactType;
+    visibility?: null | ArtifactVisibility;
+};
+
+/**
+ * Create (begin) a staging generation.
+ */
+export type CreateCacheGenerationRequest = {
+    client_refresh_id: string;
+    expected_active_generation_id: null | I64;
+    /**
+     * Declared chunk count for contiguity validation at seal time.
+     */
+    expected_chunk_count: number;
+    expected_record_count?: number | null;
+    expected_size_bytes?: number | null;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
+    source_revision?: string | null;
+};
+
+/**
+ * Create a new owner-scoped cache namespace.
+ */
+export type CreateCacheNamespaceRequest = CacheNamespacePolicyBody & {
+    /**
+     * Normalized lowercase namespace, e.g. `salesforce.users`.
+     */
+    namespace: string;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
+};
+
+export type CreateDashboardRequest = {
+    description?: string | null;
+    enabled?: boolean | null;
+    is_default_home?: boolean | null;
+    label: string;
+    ref: string;
+    scope_ref?: string | null;
+    scope_type: DashboardScopeType;
+    spec: {
+        [key: string]: unknown;
+    };
+    spec_version?: number | null;
+    tags?: Array<string>;
+    visibility: DashboardVisibility;
+};
+
+/**
+ * Request body for creating an event
+ */
+export type CreateEventRequest = {
+    /**
+     * Event configuration
+     */
+    config?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Event payload data
+     */
+    payload?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Optional source trace tag for this event.
+     * When omitted for execution-token callers, inherits from the parent execution.
+     */
+    trace_tag?: string | null;
+    /**
+     * Trigger instance ID (for correlation, often rule_id)
+     */
+    trigger_instance_id?: string | null;
+    /**
+     * Trigger reference (e.g., "core.timer", "core.webhook")
+     * Also accepts "trigger_type" for compatibility with the sensor interface spec.
+     */
+    trigger_ref: string;
+};
+
+/**
+ * Request DTO for creating a manual execution
+ */
+export type CreateExecutionRequest = {
+    /**
+     * Action reference to execute
+     */
+    action_ref: string;
+    /**
+     * Retention limit override for non-log artifacts created by this execution.
+     * Omit to inherit the action default.
+     */
+    artifact_retention_limit?: number | null;
+    artifact_retention_policy?: null | RetentionPolicyType;
+    /**
+     * Environment variables for this execution
+     */
+    env_vars: {
+        [key: string]: unknown;
+    };
+    /**
+     * Execution parameters/configuration
+     */
+    parameters: {
+        [key: string]: unknown;
+    };
+    /**
+     * Permission set refs to apply to this execution's API token. Omit to use
+     * the action default. Provide an empty array to force no API token.
+     */
+    permission_set_refs?: Array<string> | null;
+    /**
+     * Execution timeout override in seconds. Omit to inherit the action default
+     * (or the app-level `default_execution_timeout_seconds` when the action has
+     * no default). Must be a positive integer.
+     */
+    timeout_seconds?: number | null;
+    /**
+     * Worker affinity override. Omit to inherit the action default; provide
+     * `{}` to explicitly clear affinity requirements/preferences.
+     */
+    worker_affinity?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Worker label selector override. Omit to inherit the action default;
+     * provide `{}` to explicitly clear selector requirements.
+     */
+    worker_selector?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Worker taint tolerations override. Omit to inherit the action default;
+     * provide `[]` to explicitly clear tolerations.
+     */
+    worker_tolerations?: Array<{
+        [key: string]: unknown;
+    }> | null;
+};
+
+/**
+ * Request DTO for creating a new file-backed artifact version.
+ * No file content is included — the caller writes the file directly to
+ * `$ATTUNE_ARTIFACTS_DIR/{file_path}` after receiving the response.
+ */
+export type CreateFileVersionRequest = {
+    /**
+     * MIME content type (e.g. "text/plain", "application/octet-stream")
+     */
+    content_type?: string | null;
+    /**
+     * Who created this version (e.g. action ref, identity, "system")
+     */
+    created_by?: string | null;
+    /**
+     * Execution that produced this version (optional)
+     */
+    execution?: number | null;
+    /**
+     * Free-form metadata about this version
+     */
+    meta?: {
+        [key: string]: unknown;
+    } | null;
 };
 
 export type CreateIdentityRequest = {
@@ -2114,6 +3533,22 @@ export type CreateKeyRequest = {
 };
 
 /**
+ * Request to add a configured pack registry index.
+ */
+export type CreatePackRegistryIndexRequest = {
+    enabled?: boolean;
+    headers?: {
+        [key: string]: unknown;
+    };
+    name?: string | null;
+    /**
+     * Optional explicit search order position. Omit to append to the end.
+     */
+    position?: number | null;
+    url: string;
+};
+
+/**
  * Request DTO for creating a new pack
  */
 export type CreatePackRequest = {
@@ -2179,6 +3614,19 @@ export type CreatePermissionSetRoleAssignmentRequest = {
     role: string;
 };
 
+export type CreatePolicyRequest = {
+    concurrency?: null | ConcurrencyPolicyRequest;
+    description?: string | null;
+    enabled?: boolean;
+    name: string;
+    priority?: number;
+    quotas?: Array<QuotaPolicyRequest>;
+    rate_limit?: null | RateLimitPolicyRequest;
+    ref: string;
+    scope: PolicyScopeRequest;
+    tags?: Array<string>;
+};
+
 /**
  * Request DTO for creating a new rule
  */
@@ -2224,6 +3672,10 @@ export type CreateRuleRequest = {
      * Unique reference identifier (e.g., "mypack.notify_on_error")
      */
     ref: string;
+    /**
+     * Optional template used to resolve execution trace tags for this rule.
+     */
+    trace_tag_template?: string | null;
     /**
      * Parameters for trigger configuration and event filtering
      */
@@ -2351,6 +3803,34 @@ export type CreateSensorRequest = {
 };
 
 /**
+ * Request body for creating sensor tokens
+ */
+export type CreateSensorTokenRequest = {
+    /**
+     * Registered pack reference. Internal worker callers must provide it;
+     * public callers may omit it and let the API resolve it.
+     */
+    pack_ref?: string | null;
+    /**
+     * Explicit sensor cache permission-set refs. `standard` grants read-only
+     * access to the registered sensor and pack cache scopes.
+     */
+    permission_set_refs?: Array<string>;
+    /**
+     * Sensor reference (e.g., "core.timer")
+     */
+    sensor_ref: string;
+    /**
+     * List of trigger types this sensor can create events for
+     */
+    trigger_types: Array<string>;
+    /**
+     * Optional TTL in seconds (default: 86400 = 24 hours, max: 259200 = 72 hours)
+     */
+    ttl_seconds?: number | null;
+};
+
+/**
  * Request DTO for creating a new trigger
  */
 export type CreateTriggerRequest = {
@@ -2386,6 +3866,41 @@ export type CreateTriggerRequest = {
      * Unique reference identifier (e.g., "core.webhook", "system.timer")
      */
     ref: string;
+    /**
+     * Pack refs allowed to subscribe to this trigger when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    reference_visibility?: null | ActionReferenceVisibility;
+};
+
+/**
+ * Request DTO for creating a new artifact version with JSON content
+ */
+export type CreateVersionJsonRequest = {
+    /**
+     * Structured JSON content for this version
+     */
+    content: {
+        [key: string]: unknown;
+    };
+    /**
+     * MIME content type override (defaults to "application/json")
+     */
+    content_type?: string | null;
+    /**
+     * Who created this version (e.g. action ref, identity, "system")
+     */
+    created_by?: string | null;
+    /**
+     * Execution that produced this version (optional)
+     */
+    execution?: number | null;
+    /**
+     * Free-form metadata about this version
+     */
+    meta?: {
+        [key: string]: unknown;
+    } | null;
 };
 
 export type CreateWorkQueueRequest = {
@@ -2414,6 +3929,15 @@ export type CreateWorkQueueRequest = {
      */
     permission_set_refs?: Array<string> | null;
     ref: string;
+    /**
+     * Pack refs allowed to target this queue when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    reference_visibility?: null | ActionReferenceVisibility;
+    /**
+     * Optional template used to resolve execution trace tags for queue dispatches.
+     */
+    trace_tag_template?: string | null;
     update_strategy?: WorkQueueUpdateStrategy;
 };
 
@@ -2504,14 +4028,262 @@ export type CurrentUserResponse = {
     provider_profile?: null | ProviderProfileResponse;
 };
 
+export type DashboardAuthorizationMode = 'operator_global' | 'identity_filtered';
+
+export type DashboardDataRequest = {
+    card_ids?: Array<string> | null;
+    filters?: {
+        [key: string]: unknown;
+    };
+    include_meta?: boolean;
+    request_id?: string | null;
+    /**
+     * Optional source selector.
+     *
+     * Membership only: request order is ignored. The response emits `sources[]`
+     * in canonical `source_id` ascending order.
+     */
+    source_ids?: Array<string> | null;
+    time_range?: null | DashboardTimeRangeRequest;
+    time_window?: string | null;
+    timezone?: string | null;
+};
+
+export type DashboardDataResponse = {
+    contract_version: number;
+    dashboard_ref: string;
+    dashboard_revision: number;
+    effective_time_range: DashboardEffectiveTimeRange;
+    partial: boolean;
+    request_id?: string | null;
+    resolved_at: string;
+    /**
+     * Source results in canonical `source_id` ascending order.
+     */
+    sources: Array<DashboardSourceResult>;
+    spec_version: number;
+};
+
+export type DashboardDescriptionPatch = NullableStringPatch | string;
+
+export type DashboardEffectiveTimeRange = {
+    end: string;
+    start: string;
+    timezone: string;
+};
+
+export type DashboardFreshnessMode = 'raw_only' | 'aggregate_only' | 'aggregate_plus_tail' | 'raw_only_fallback';
+
+export type DashboardListItemResponse = {
+    description?: string | null;
+    id: number;
+    is_default_home: boolean;
+    label: string;
+    ref: string;
+    revision: number;
+    scope_ref: string;
+    scope_type: DashboardScopeType;
+    tags: Array<string>;
+    updated: string;
+    visibility: DashboardVisibility;
+};
+
+export type DashboardMetadataResponse = {
+    created: string;
+    description?: string | null;
+    enabled: boolean;
+    id: number;
+    is_adhoc: boolean;
+    is_default_home: boolean;
+    label: string;
+    owner_identity?: number | null;
+    pack?: number | null;
+    ref: string;
+    revision: number;
+    scope_ref: string;
+    scope_type: DashboardScopeType;
+    spec: {
+        [key: string]: unknown;
+    };
+    spec_version: number;
+    tags: Array<string>;
+    updated: string;
+    visibility: DashboardVisibility;
+};
+
+export type DashboardScopeType = 'global' | 'pack' | 'identity' | 'tenant';
+
+export type DashboardSourceCatalogResponse = {
+    contracts: Array<DashboardSourceContractResponse>;
+    source: string;
+};
+
+export type DashboardSourceContractResponse = {
+    authorization_basis: AuthorizationBasis;
+    availability: SourceAvailability;
+    default_freshness_mode: FreshnessMode;
+    notes?: string | null;
+    ordering: Array<string>;
+    param_schema: DashboardSourceParamSchemaResponse;
+    response_shape: string;
+    source_type: SourceType;
+};
+
+export type DashboardSourceError = {
+    code: string;
+    details: {
+        [key: string]: unknown;
+    } | null;
+    message: string;
+    retryable: boolean;
+};
+
+export type DashboardSourceMeta = {
+    aggregate_watermark?: string | null;
+    authorization_mode: DashboardAuthorizationMode;
+    authorized_refs: {
+        [key: string]: unknown;
+    } | null;
+    bucket_size?: string | null;
+    cache_hit: boolean;
+    freshness_mode: DashboardFreshnessMode;
+    ordering: Array<string>;
+    truncated: boolean;
+    unit_hints: {
+        [key: string]: unknown;
+    };
+};
+
+export type DashboardSourceParamSchemaResponse = {
+    optional: Array<string>;
+    required: Array<string>;
+};
+
+export type DashboardSourceResult = {
+    data: {
+        [key: string]: unknown;
+    } | null;
+    error?: null | DashboardSourceError;
+    meta: DashboardSourceMeta;
+    source_id: string;
+    source_type: string;
+    status: DashboardSourceStatus;
+};
+
+export type DashboardSourceStatus = 'ok' | 'empty' | 'partial' | 'stale' | 'forbidden' | 'invalid' | 'error';
+
+export type DashboardTimeRangeRequest = {
+    end: string;
+    start: string;
+};
+
+export type DashboardVisibility = 'private' | 'pack' | 'public';
+
 /**
- * Effective resource-level permissions assigned to an identity.
+ * Dependency analysis error
+ */
+export type DependencyError = {
+    /**
+     * Error message
+     */
+    error: string;
+    /**
+     * Pack path where error occurred
+     */
+    pack_path: string;
+};
+
+/**
+ * Request DTO for downloading packs
+ */
+export type DownloadPacksRequest = {
+    /**
+     * List of pack sources (git URLs, HTTP URLs, or registry refs)
+     */
+    packs: Array<string>;
+    /**
+     * Git reference (branch, tag, or commit) for git sources
+     */
+    ref_spec?: string | null;
+};
+
+/**
+ * Response DTO for download packs operation
+ */
+export type DownloadPacksResponse = {
+    /**
+     * Successfully downloaded packs
+     */
+    downloaded_packs: Array<DownloadedPack>;
+    /**
+     * Failed pack downloads
+     */
+    failed_packs: Array<FailedPack>;
+    /**
+     * Number of failed downloads
+     */
+    failure_count: number;
+    /**
+     * Number of successful downloads
+     */
+    success_count: number;
+    /**
+     * Total number of packs requested
+     */
+    total_count: number;
+};
+
+/**
+ * Information about a downloaded pack
+ */
+export type DownloadedPack = {
+    /**
+     * Directory checksum
+     */
+    checksum?: string | null;
+    /**
+     * Git commit hash (for git sources)
+     */
+    git_commit?: string | null;
+    /**
+     * Local path to downloaded pack
+     */
+    pack_path: string;
+    /**
+     * Pack reference from pack.yaml
+     */
+    pack_ref: string;
+    /**
+     * Pack version from pack.yaml
+     */
+    pack_version: string;
+    /**
+     * Original source
+     */
+    source: string;
+    /**
+     * Source type (git, http, registry)
+     */
+    source_type: string;
+};
+
+/**
+ * Effective permissions assigned to an identity.
+ *
+ * Each entry corresponds to one effective grant and can include optional
+ * constraints when the grant is scoped (for example to specific packs or refs).
  */
 export type EffectivePermissionResponse = {
     /**
      * Actions allowed for the resource.
      */
     actions: Array<string>;
+    /**
+     * Optional grant constraints describing permission scope granularity.
+     */
+    constraints?: {
+        [key: string]: unknown;
+    } | null;
     /**
      * RBAC resource name.
      */
@@ -2569,6 +4341,10 @@ export type EnforcementResponse = {
      */
     status: EnforcementStatus;
     /**
+     * Trace tag associated to this enforcement via linked executions.
+     */
+    trace_tag?: string | null;
+    /**
      * Trigger reference
      */
     trigger_ref: string;
@@ -2603,6 +4379,10 @@ export type EnforcementSummary = {
      */
     status: EnforcementStatus;
     /**
+     * Trace tag associated to this enforcement via linked executions.
+     */
+    trace_tag?: string | null;
+    /**
      * Trigger reference
      */
     trigger_ref: string;
@@ -2617,6 +4397,37 @@ export type EnqueueWorkQueueItemRequest = {
         [key: string]: unknown;
     };
     priority?: number | null;
+    /**
+     * Optional source trace tag for this queue item.
+     * When omitted for execution-token callers, inherits from the parent execution.
+     */
+    trace_tag?: string | null;
+};
+
+/**
+ * Environment details
+ */
+export type Environments = {
+    nodejs?: null | NodeJsEnvironment;
+    python?: null | PythonEnvironment;
+};
+
+/**
+ * Standard API error response
+ */
+export type ErrorResponse = {
+    /**
+     * Optional error code
+     */
+    code?: string | null;
+    /**
+     * Optional additional details
+     */
+    details?: unknown;
+    /**
+     * Error message
+     */
+    error: string;
 };
 
 /**
@@ -2642,7 +4453,7 @@ export type EventResponse = {
      */
     payload: {
         [key: string]: unknown;
-    };
+    } | null;
     rule?: null | I64;
     /**
      * Rule reference (if event was generated by a specific rule)
@@ -2653,6 +4464,10 @@ export type EventResponse = {
      * Source reference
      */
     source_ref?: string | null;
+    /**
+     * Optional source trace tag attached at event creation.
+     */
+    trace_tag?: string | null;
     trigger?: null | I64;
     /**
      * Trigger reference
@@ -2676,6 +4491,12 @@ export type EventSummary = {
      * Event ID
      */
     id: I64;
+    /**
+     * Event payload data, when present
+     */
+    payload: {
+        [key: string]: unknown;
+    } | null;
     rule?: null | I64;
     /**
      * Rule reference (if event was generated by a specific rule)
@@ -2686,11 +4507,37 @@ export type EventSummary = {
      * Source reference
      */
     source_ref?: string | null;
+    /**
+     * Trace tag associated to this event.
+     */
+    trace_tag?: string | null;
     trigger?: null | I64;
     /**
      * Trigger reference
      */
     trigger_ref: string;
+};
+
+/**
+ * Response DTO for manual execution reschedule requests.
+ */
+export type ExecutionRescheduleResponse = {
+    /**
+     * Number of reschedule attempts recorded for this execution.
+     */
+    attempt_count: number;
+    /**
+     * Current execution row after republish.
+     */
+    execution: ExecutionResponse;
+    /**
+     * Timestamp for the recorded reschedule attempt.
+     */
+    last_attempt_at: string;
+    /**
+     * Human-readable status of the republish request.
+     */
+    message: string;
 };
 
 /**
@@ -2759,6 +4606,14 @@ export type ExecutionResponse = {
      * Execution status
      */
     status: ExecutionStatus;
+    /**
+     * Resolved execution timeout in seconds, snapshotted at creation time.
+     */
+    timeout_seconds?: number | null;
+    /**
+     * System-wide trace tag for correlating related automatic activity.
+     */
+    trace_tag?: string | null;
     /**
      * Last update timestamp
      */
@@ -2837,6 +4692,14 @@ export type ExecutionSummary = {
      */
     status: ExecutionStatus;
     /**
+     * Resolved execution timeout in seconds, snapshotted at creation time.
+     */
+    timeout_seconds?: number | null;
+    /**
+     * System-wide trace tag for correlating related automatic activity.
+     */
+    trace_tag?: string | null;
+    /**
      * Trigger reference (if triggered by a trigger)
      */
     trigger_ref?: string | null;
@@ -2850,6 +4713,142 @@ export type ExecutionSummary = {
     workflow_task?: {
         [key: string]: unknown;
     } | null;
+};
+
+/**
+ * Failed environment build
+ */
+export type FailedEnvironment = {
+    /**
+     * Error message
+     */
+    error: string;
+    /**
+     * Pack directory path
+     */
+    pack_path: string;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+    /**
+     * Runtime that failed
+     */
+    runtime: string;
+};
+
+/**
+ * Information about a failed pack download
+ */
+export type FailedPack = {
+    /**
+     * Error message
+     */
+    error: string;
+    /**
+     * Pack source that failed
+     */
+    source: string;
+};
+
+/**
+ * Failed pack registration
+ */
+export type FailedPackRegistration = {
+    /**
+     * Error message
+     */
+    error: string;
+    /**
+     * Error stage
+     */
+    error_stage: string;
+    /**
+     * Pack path
+     */
+    pack_path: string;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+};
+
+/**
+ * Response for the execution failure rate summary.
+ */
+export type FailureRateResponse = {
+    /**
+     * Number of completed executions
+     */
+    completed_count: number;
+    /**
+     * Number of failed executions
+     */
+    failed_count: number;
+    /**
+     * Failure rate as a percentage (0.0 – 100.0)
+     */
+    failure_rate_pct: number;
+    /**
+     * Time range start
+     */
+    since: string;
+    /**
+     * Number of timed-out executions
+     */
+    timeout_count: number;
+    /**
+     * Total executions reaching a terminal state in the window
+     */
+    total_terminal: number;
+    /**
+     * Time range end
+     */
+    until: string;
+};
+
+export type FreshnessMode = 'raw_only' | 'aggregate_only' | 'aggregate_plus_tail' | 'raw_only_fallback';
+
+/**
+ * Request DTO for getting pack dependencies
+ */
+export type GetPackDependenciesRequest = {
+    /**
+     * List of pack directory paths to analyze
+     */
+    pack_paths: Array<string>;
+    /**
+     * Skip pack.yaml validation
+     */
+    skip_validation?: boolean;
+};
+
+/**
+ * Response DTO for get pack dependencies operation
+ */
+export type GetPackDependenciesResponse = {
+    /**
+     * Packs that were analyzed
+     */
+    analyzed_packs: Array<AnalyzedPack>;
+    /**
+     * All dependencies found
+     */
+    dependencies: Array<PackDependency>;
+    /**
+     * Errors encountered during analysis
+     */
+    errors: Array<DependencyError>;
+    /**
+     * Dependencies not yet installed
+     */
+    missing_dependencies: Array<PackDependency>;
+    /**
+     * Runtime requirements by pack
+     */
+    runtime_requirements: {
+        [key: string]: RuntimeRequirements;
+    };
 };
 
 /**
@@ -2868,6 +4867,44 @@ export type HealthResponse = {
      * Service version
      */
     version: string;
+};
+
+/**
+ * Response DTO for a single entity history record.
+ */
+export type HistoryRecordResponse = {
+    /**
+     * Names of fields that changed (empty for INSERT/DELETE)
+     */
+    changed_fields: Array<string>;
+    /**
+     * The primary key of the changed entity
+     */
+    entity_id: number;
+    /**
+     * Denormalized human-readable identifier (e.g., action_ref, worker name)
+     */
+    entity_ref?: string | null;
+    /**
+     * New values of changed fields (null for DELETE)
+     */
+    new_values: {
+        [key: string]: unknown;
+    };
+    /**
+     * Previous values of changed fields (null for INSERT)
+     */
+    old_values: {
+        [key: string]: unknown;
+    };
+    /**
+     * The operation: `INSERT`, `UPDATE`, or `DELETE`
+     */
+    operation: string;
+    /**
+     * When the change occurred
+     */
+    time: string;
 };
 
 export type IdentityResponse = {
@@ -3004,6 +5041,14 @@ export type InquirySummary = {
  */
 export type InstallPackRequest = {
     /**
+     * Replace an existing pack with the same ref
+     */
+    force?: boolean;
+    /**
+     * Treat the source as explicit and do not resolve it through pack registries
+     */
+    no_registry?: boolean;
+    /**
      * Git branch, tag, or commit reference
      */
     ref_spec?: string | null;
@@ -3019,6 +5064,35 @@ export type InstallPackRequest = {
      * Repository URL or source location
      */
     source: string;
+};
+
+/**
+ * Installation source for a pack
+ */
+export type InstallSource = {
+    /**
+     * Checksum in format "algorithm:hash"
+     */
+    checksum: string;
+    /**
+     * Git ref (tag, branch, commit)
+     */
+    ref?: string | null;
+    type: 'git';
+    /**
+     * Git repository URL
+     */
+    url: string;
+} | {
+    /**
+     * Checksum in format "algorithm:hash"
+     */
+    checksum: string;
+    type: 'archive';
+    /**
+     * Archive URL
+     */
+    url: string;
 };
 
 export type IntegrationTokenResponse = {
@@ -3038,6 +5112,37 @@ export type IntegrationTokenResponse = {
     token_prefix: string;
     token_suffix: string;
     updated: string;
+};
+
+/**
+ * Request body for internal sensor token creation/reissue.
+ *
+ * Worker/service tokens must provide `sensor_ref` and `trigger_types`.
+ * Sensor-token refresh calls may omit those fields; the server will derive them
+ * from authenticated identity state.
+ */
+export type InternalCreateSensorTokenRequest = {
+    /**
+     * Registered pack reference (required for worker/service callers).
+     */
+    pack_ref?: string | null;
+    /**
+     * Explicit cache permission-set refs (required, though it may be empty,
+     * for worker/service callers).
+     */
+    permission_set_refs?: Array<string> | null;
+    /**
+     * Sensor reference (required for worker/service callers)
+     */
+    sensor_ref?: string | null;
+    /**
+     * List of trigger types this sensor can create events for (required for worker/service callers)
+     */
+    trigger_types?: Array<string> | null;
+    /**
+     * Optional TTL in seconds (default: 86400 = 24 hours, max: 259200 = 72 hours)
+     */
+    ttl_seconds?: number | null;
 };
 
 /**
@@ -3093,7 +5198,7 @@ export type KeyResponse = {
      */
     updated: string;
     /**
-     * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+     * The value. Encrypted values are null unless explicitly decrypted.
      */
     value: unknown;
 };
@@ -3177,6 +5282,42 @@ export type LoginRequest = {
 };
 
 /**
+ * Node.js environment details
+ */
+export type NodeJsEnvironment = {
+    /**
+     * Whether dependencies were installed
+     */
+    dependencies_installed: boolean;
+    /**
+     * Path to node_modules
+     */
+    node_modules_path: string;
+    /**
+     * Node.js version used
+     */
+    nodejs_version: string;
+    /**
+     * Number of packages installed
+     */
+    package_count: number;
+};
+
+/**
+ * Node.js runtime requirements
+ */
+export type NodeJsRequirements = {
+    /**
+     * Path to package.json
+     */
+    package_file?: string | null;
+    /**
+     * Node.js version requirement
+     */
+    version?: string | null;
+};
+
+/**
  * Explicit patch operation for nullable JSON fields.
  */
 export type NullableJsonPatch = {
@@ -3198,11 +5339,145 @@ export type NullableStringPatch = {
 
 export type OwnerType = 'system' | 'identity' | 'pack' | 'action' | 'sensor';
 
+/**
+ * Pack contents summary
+ */
+export type PackContents = {
+    /**
+     * List of actions
+     */
+    actions?: Array<ComponentSummary>;
+    /**
+     * List of bundled rules
+     */
+    rules?: Array<ComponentSummary>;
+    /**
+     * List of sensors
+     */
+    sensors?: Array<ComponentSummary>;
+    /**
+     * List of triggers
+     */
+    triggers?: Array<ComponentSummary>;
+    /**
+     * List of bundled workflows
+     */
+    workflows?: Array<ComponentSummary>;
+};
+
+/**
+ * Pack dependencies
+ */
+export type PackDependencies = {
+    /**
+     * Attune version requirement (semver)
+     */
+    attune_version?: string | null;
+    /**
+     * Node.js version requirement
+     */
+    nodejs_version?: string | null;
+    /**
+     * Pack dependencies (format: "ref@version")
+     */
+    packs?: Array<string>;
+    /**
+     * Python version requirement
+     */
+    python_version?: string | null;
+};
+
+/**
+ * Pack dependency information
+ */
+export type PackDependency = {
+    /**
+     * Whether dependency is already installed
+     */
+    already_installed: boolean;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+    /**
+     * Pack that requires this dependency
+     */
+    required_by: string;
+    /**
+     * Version specification
+     */
+    version_spec: string;
+};
+
 export type PackDescriptionPatch = {
     op: 'set';
     value: string;
 } | {
     op: 'clear';
+};
+
+/**
+ * Pack entry in a registry index
+ */
+export type PackIndexEntry = {
+    /**
+     * Pack author/maintainer name
+     */
+    author: string;
+    /**
+     * Pack components summary
+     */
+    contents: PackContents;
+    dependencies?: null | PackDependencies;
+    /**
+     * Brief pack description
+     */
+    description: string;
+    /**
+     * Contact email
+     */
+    email?: string | null;
+    /**
+     * Pack homepage URL
+     */
+    homepage?: string | null;
+    /**
+     * Available installation sources
+     */
+    install_sources: Array<InstallSource>;
+    /**
+     * Searchable keywords/tags
+     */
+    keywords?: Array<string>;
+    /**
+     * Human-readable pack name
+     */
+    label: string;
+    /**
+     * SPDX license identifier
+     */
+    license: string;
+    meta?: null | PackMeta;
+    /**
+     * Unique pack identifier (matches pack.yaml ref)
+     */
+    ref: string;
+    /**
+     * Source repository URL
+     */
+    repository?: string | null;
+    /**
+     * Required runtimes (python3, nodejs, shell)
+     */
+    runtime_deps: Array<string>;
+    /**
+     * Brief use-case summary for browsing/install decisions
+     */
+    use_case?: string | null;
+    /**
+     * Semantic version (latest available)
+     */
+    version: string;
 };
 
 /**
@@ -3218,6 +5493,33 @@ export type PackInstallResponse = {
      * Whether tests were skipped
      */
     tests_skipped: boolean;
+};
+
+/**
+ * Additional pack metadata
+ */
+export type PackMeta = {
+    [key: string]: unknown;
+} & {
+    /**
+     * Download count
+     */
+    downloads?: number | null;
+    /**
+     * Star/rating count
+     */
+    stars?: number | null;
+    /**
+     * Tested Attune versions
+     */
+    tested_attune_versions?: Array<string>;
+};
+
+export type PackRegistryIndexSummary = {
+    id?: number | null;
+    name?: string | null;
+    position: number;
+    url: string;
 };
 
 /**
@@ -3385,6 +5687,12 @@ export type PackTestSummary = {
     triggerReason: string;
 };
 
+export type PackUploadForm = {
+    force?: string | null;
+    pack: Blob | File;
+    skip_tests?: string | null;
+};
+
 /**
  * Response for pack workflow sync operation
  */
@@ -3468,6 +5776,10 @@ export type PaginatedResponseActionSearchHit = {
          */
         ref: string;
         /**
+         * Pack-level visibility for references from rules, workflows, and queues.
+         */
+        reference_visibility: ActionReferenceVisibility;
+        /**
          * Runtime reference (e.g., "core.python"). None for workflow actions.
          */
         runtime_ref?: string | null;
@@ -3508,6 +5820,10 @@ export type PaginatedResponseActionSummary = {
          */
         description?: string | null;
         /**
+         * Whether this action is enabled
+         */
+        enabled: boolean;
+        /**
          * Entry point
          */
         entrypoint: string;
@@ -3533,6 +5849,14 @@ export type PaginatedResponseActionSummary = {
          */
         ref: string;
         /**
+         * Pack refs allowed to reference this action when visibility is restricted.
+         */
+        reference_allowed_pack_refs?: Array<string>;
+        /**
+         * Pack-level visibility for references from rules, workflows, and queues.
+         */
+        reference_visibility: ActionReferenceVisibility;
+        /**
          * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
          */
         required_worker_runtimes?: {
@@ -3550,6 +5874,10 @@ export type PaginatedResponseActionSummary = {
          * Semver version constraint for the runtime
          */
         runtime_version_constraint?: string | null;
+        /**
+         * Default execution timeout (seconds) snapshotted onto executions of this action.
+         */
+        timeout_seconds?: number | null;
         /**
          * Last update timestamp
          */
@@ -3572,6 +5900,69 @@ export type PaginatedResponseActionSummary = {
          * Workflow definition ID (non-null if this action is a workflow)
          */
         workflow_def?: number | null;
+    }>;
+    /**
+     * Pagination metadata
+     */
+    pagination: PaginationMeta;
+};
+
+/**
+ * Paginated response wrapper
+ */
+export type PaginatedResponseArtifactSummary = {
+    /**
+     * The page items
+     */
+    items: Array<{
+        /**
+         * Classification used to distinguish runtime log artifacts from general artifacts.
+         */
+        classification: ArtifactClassification;
+        /**
+         * MIME content type
+         */
+        content_type?: string | null;
+        /**
+         * Creation timestamp
+         */
+        created: string;
+        /**
+         * Artifact ID
+         */
+        id: number;
+        /**
+         * Human-readable name
+         */
+        name?: string | null;
+        /**
+         * Owner identifier
+         */
+        owner: string;
+        /**
+         * Artifact reference
+         */
+        ref: string;
+        /**
+         * Owner scope
+         */
+        scope: OwnerType;
+        /**
+         * Size of latest version in bytes
+         */
+        size_bytes?: number | null;
+        /**
+         * Artifact type
+         */
+        type: ArtifactType;
+        /**
+         * Last update timestamp
+         */
+        updated: string;
+        /**
+         * Visibility level
+         */
+        visibility: ArtifactVisibility;
     }>;
     /**
      * Pagination metadata
@@ -3638,6 +6029,10 @@ export type PaginatedResponseEnforcementSummary = {
          */
         status: EnforcementStatus;
         /**
+         * Trace tag associated to this enforcement via linked executions.
+         */
+        trace_tag?: string | null;
+        /**
          * Trigger reference
          */
         trigger_ref: string;
@@ -3668,6 +6063,12 @@ export type PaginatedResponseEventSummary = {
          * Event ID
          */
         id: I64;
+        /**
+         * Event payload data, when present
+         */
+        payload: {
+            [key: string]: unknown;
+        } | null;
         rule?: null | I64;
         /**
          * Rule reference (if event was generated by a specific rule)
@@ -3678,6 +6079,10 @@ export type PaginatedResponseEventSummary = {
          * Source reference
          */
         source_ref?: string | null;
+        /**
+         * Trace tag associated to this event.
+         */
+        trace_tag?: string | null;
         trigger?: null | I64;
         /**
          * Trigger reference
@@ -3736,6 +6141,14 @@ export type PaginatedResponseExecutionSummary = {
          */
         status: ExecutionStatus;
         /**
+         * Resolved execution timeout in seconds, snapshotted at creation time.
+         */
+        timeout_seconds?: number | null;
+        /**
+         * System-wide trace tag for correlating related automatic activity.
+         */
+        trace_tag?: string | null;
+        /**
          * Trigger reference (if triggered by a trigger)
          */
         trigger_ref?: string | null;
@@ -3749,6 +6162,53 @@ export type PaginatedResponseExecutionSummary = {
         workflow_task?: {
             [key: string]: unknown;
         } | null;
+    }>;
+    /**
+     * Pagination metadata
+     */
+    pagination: PaginationMeta;
+};
+
+/**
+ * Paginated response wrapper
+ */
+export type PaginatedResponseHistoryRecordResponse = {
+    /**
+     * The page items
+     */
+    items: Array<{
+        /**
+         * Names of fields that changed (empty for INSERT/DELETE)
+         */
+        changed_fields: Array<string>;
+        /**
+         * The primary key of the changed entity
+         */
+        entity_id: number;
+        /**
+         * Denormalized human-readable identifier (e.g., action_ref, worker name)
+         */
+        entity_ref?: string | null;
+        /**
+         * New values of changed fields (null for DELETE)
+         */
+        new_values: {
+            [key: string]: unknown;
+        };
+        /**
+         * Previous values of changed fields (null for INSERT)
+         */
+        old_values: {
+            [key: string]: unknown;
+        };
+        /**
+         * The operation: `INSERT`, `UPDATE`, or `DELETE`
+         */
+        operation: string;
+        /**
+         * When the change occurred
+         */
+        time: string;
     }>;
     /**
      * Pagination metadata
@@ -3946,6 +6406,34 @@ export type PaginatedResponsePackTestSummary = {
 /**
  * Paginated response wrapper
  */
+export type PaginatedResponsePolicySummary = {
+    /**
+     * The page items
+     */
+    items: Array<{
+        concurrency?: null | ConcurrencyPolicyResponse;
+        created: string;
+        description?: string | null;
+        enabled: boolean;
+        id: number;
+        name: string;
+        priority: number;
+        quotas: Array<QuotaPolicyResponse>;
+        rate_limit?: null | RateLimitPolicyResponse;
+        ref: string;
+        scope: PolicyScopeResponse;
+        tags: Array<string>;
+        updated: string;
+    }>;
+    /**
+     * Pagination metadata
+     */
+    pagination: PaginationMeta;
+};
+
+/**
+ * Paginated response wrapper
+ */
 export type PaginatedResponseRuleSummary = {
     /**
      * The page items
@@ -3994,6 +6482,10 @@ export type PaginatedResponseRuleSummary = {
          * Unique reference identifier
          */
         ref: string;
+        /**
+         * Optional template used to resolve execution trace tags for this rule.
+         */
+        trace_tag_template?: string | null;
         /**
          * Parameters for trigger configuration and event filtering
          */
@@ -4131,6 +6623,14 @@ export type PaginatedResponseTriggerSummary = {
          */
         ref: string;
         /**
+         * Pack refs allowed to subscribe to this trigger when visibility is restricted.
+         */
+        reference_allowed_pack_refs?: Array<string>;
+        /**
+         * Pack-level visibility for rule subscriptions.
+         */
+        reference_visibility: ActionReferenceVisibility;
+        /**
          * Last update timestamp
          */
         updated: string;
@@ -4180,6 +6680,7 @@ export type PaginatedResponseWorkQueueItemResponse = {
         requested_by_execution?: null | I64;
         requested_by_identity?: null | I64;
         status: WorkQueueItemStatus;
+        trace_tag?: string | null;
         updated: string;
     }>;
     /**
@@ -4206,6 +6707,9 @@ export type PaginatedResponseWorkQueueSummary = {
         label: string;
         pack_ref?: string | null;
         ref: string;
+        reference_allowed_pack_refs: Array<string>;
+        reference_visibility: ActionReferenceVisibility;
+        trace_tag_template?: string | null;
         updated: string;
     }>;
     /**
@@ -4355,9 +6859,84 @@ export type PermissionSetSummary = {
     roles: Array<PermissionSetRoleAssignmentResponse>;
 };
 
+export type PolicyMethod = 'cancel' | 'enqueue';
+
+export type PolicyResponse = {
+    concurrency?: null | ConcurrencyPolicyResponse;
+    created: string;
+    description?: string | null;
+    enabled: boolean;
+    id: number;
+    name: string;
+    priority: number;
+    quotas: Array<QuotaPolicyResponse>;
+    rate_limit?: null | RateLimitPolicyResponse;
+    ref: string;
+    scope: PolicyScopeResponse;
+    tags: Array<string>;
+    updated: string;
+};
+
+export type PolicyScopeRequest = {
+    action_ref?: string | null;
+    pack_ref?: string | null;
+    type: PolicyScopeType;
+};
+
+export type PolicyScopeResponse = {
+    action?: number | null;
+    action_ref?: string | null;
+    pack?: number | null;
+    pack_ref?: string | null;
+    type: PolicyScopeType;
+};
+
+export type PolicyScopeType = 'global' | 'pack' | 'action';
+
+export type PolicySummary = {
+    concurrency?: null | ConcurrencyPolicyResponse;
+    created: string;
+    description?: string | null;
+    enabled: boolean;
+    id: number;
+    name: string;
+    priority: number;
+    quotas: Array<QuotaPolicyResponse>;
+    rate_limit?: null | RateLimitPolicyResponse;
+    ref: string;
+    scope: PolicyScopeResponse;
+    tags: Array<string>;
+    updated: string;
+};
+
 export type PreferredWorkerSelectorTerm = {
     preference: WorkerSelectorTerm;
     weight?: number;
+};
+
+export type PreviewDashboardRequest = {
+    dashboard: CreateDashboardRequest;
+    data_request: DashboardDataRequest;
+};
+
+export type PreviewWorkQueueItemsRequest = {
+    limit?: number;
+    selector: WorkQueueItemJsonPathSelector;
+};
+
+export type PreviewWorkQueueItemsResponse = {
+    items: Array<WorkQueueItemResponse>;
+    matched_count: number;
+    preview_count: number;
+};
+
+/**
+ * Atomically promote a ready generation.
+ */
+export type PromoteCacheGenerationRequest = {
+    expected_active_generation_id: null | I64;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
 };
 
 /**
@@ -4403,6 +6982,42 @@ export type ProviderProfileResponse = {
 };
 
 /**
+ * Python environment details
+ */
+export type PythonEnvironment = {
+    /**
+     * Number of packages installed
+     */
+    package_count: number;
+    /**
+     * Python version used
+     */
+    python_version: string;
+    /**
+     * Whether requirements were installed
+     */
+    requirements_installed: boolean;
+    /**
+     * Path to virtualenv
+     */
+    virtualenv_path: string;
+};
+
+/**
+ * Python runtime requirements
+ */
+export type PythonRequirements = {
+    /**
+     * Path to requirements.txt
+     */
+    requirements_file?: string | null;
+    /**
+     * Python version requirement
+     */
+    version?: string | null;
+};
+
+/**
  * Response DTO for queue statistics
  */
 export type QueueStatsResponse = {
@@ -4444,6 +7059,26 @@ export type QueueStatsResponse = {
     total_enqueued: number;
 };
 
+export type QuotaPolicyRequest = {
+    limit: number;
+    quota_type: string;
+};
+
+export type QuotaPolicyResponse = {
+    limit: number;
+    quota_type: string;
+};
+
+export type RateLimitPolicyRequest = {
+    max_executions: number;
+    window_seconds: number;
+};
+
+export type RateLimitPolicyResponse = {
+    max_executions: number;
+    window_seconds: number;
+};
+
 /**
  * Refresh token request
  */
@@ -4473,6 +7108,50 @@ export type RegisterPackRequest = {
 };
 
 /**
+ * Request DTO for registering multiple packs
+ */
+export type RegisterPacksRequest = {
+    /**
+     * Force registration (replace if exists)
+     */
+    force?: boolean;
+    /**
+     * List of pack directory paths to register
+     */
+    pack_paths: Array<string>;
+    /**
+     * Base directory for permanent storage
+     */
+    packs_base_dir?: string | null;
+    /**
+     * Skip running pack tests
+     */
+    skip_tests?: boolean;
+    /**
+     * Skip schema validation
+     */
+    skip_validation?: boolean;
+};
+
+/**
+ * Response DTO for register packs operation
+ */
+export type RegisterPacksResponse = {
+    /**
+     * Failed pack registrations
+     */
+    failed_packs: Array<FailedPackRegistration>;
+    /**
+     * Successfully registered packs
+     */
+    registered_packs: Array<RegisteredPack>;
+    /**
+     * Summary statistics
+     */
+    summary: RegistrationSummary;
+};
+
+/**
  * Register request
  */
 export type RegisterRequest = {
@@ -4488,6 +7167,63 @@ export type RegisterRequest = {
      * Password
      */
     password: string;
+};
+
+/**
+ * Information about a registered pack
+ */
+export type RegisteredPack = {
+    /**
+     * Registered components by type
+     */
+    components_registered: ComponentCounts;
+    /**
+     * Pack database ID
+     */
+    pack_id: number;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+    /**
+     * Pack version
+     */
+    pack_version: string;
+    /**
+     * Permanent storage path
+     */
+    storage_path: string;
+    test_result?: null | TestResult;
+    /**
+     * Validation results
+     */
+    validation_results: ValidationResults;
+};
+
+/**
+ * Registration summary
+ */
+export type RegistrationSummary = {
+    /**
+     * Duration in milliseconds
+     */
+    duration_ms: number;
+    /**
+     * Failed registrations
+     */
+    failure_count: number;
+    /**
+     * Successfully registered
+     */
+    success_count: number;
+    /**
+     * Total components registered
+     */
+    total_components: number;
+    /**
+     * Total packs processed
+     */
+    total_packs: number;
 };
 
 export type ResolvedWorkQueueDispatchTuningResponse = {
@@ -4507,6 +7243,11 @@ export type RetentionConfig = {
      * Maximum rows to delete per target per cycle for regular tables.
      */
     batch_size?: number;
+    /**
+     * Cache generation/entry retention and freshness maintenance. Persisted
+     * with the runtime retention singleton and reloaded every cycle.
+     */
+    cache_retention?: CacheRetentionConfig;
     /**
      * How often the supervisor runs retention, in seconds.
      */
@@ -4529,14 +7270,13 @@ export type RetentionPolicyType = 'versions' | 'days' | 'hours' | 'minutes';
 
 /**
  * Runtime database row retention settings.
+ *
+ * A target with `max_age_seconds: None` keeps rows forever (purging disabled).
+ * A target with `max_age_seconds: Some(n)` purges rows older than `n` seconds.
  */
 export type RetentionTargetConfig = {
     /**
-     * Whether this retention target is processed.
-     */
-    enabled?: boolean;
-    /**
-     * Maximum row age in seconds. `None` means keep forever.
+     * Maximum row age in seconds. `None` means keep forever (no purging).
      */
     max_age_seconds?: number | null;
 };
@@ -4638,6 +7378,10 @@ export type RuleResponse = {
      */
     ref: string;
     /**
+     * Optional template used to resolve execution trace tags for this rule.
+     */
+    trace_tag_template?: string | null;
+    /**
      * Trigger ID (null if the referenced trigger has been deleted)
      */
     trigger?: number | null;
@@ -4705,6 +7449,10 @@ export type RuleSummary = {
      */
     ref: string;
     /**
+     * Optional template used to resolve execution trace tags for this rule.
+     */
+    trace_tag_template?: string | null;
+    /**
      * Parameters for trigger configuration and event filtering
      */
     trigger_params: {
@@ -4718,6 +7466,18 @@ export type RuleSummary = {
      * Last update timestamp
      */
     updated: string;
+};
+
+/**
+ * Runtime requirements for a pack
+ */
+export type RuntimeRequirements = {
+    nodejs?: null | NodeJsRequirements;
+    /**
+     * Pack reference
+     */
+    pack_ref: string;
+    python?: null | PythonRequirements;
 };
 
 /**
@@ -4764,6 +7524,74 @@ export type RuntimeVersionConstraintPatch = {
     value: string;
 } | {
     op: 'clear';
+};
+
+/**
+ * Request DTO for saving a workflow file to disk and syncing to DB
+ */
+export type SaveWorkflowFileRequest = {
+    /**
+     * The full workflow definition as JSON (will be serialized to YAML on disk)
+     */
+    definition: {
+        [key: string]: unknown;
+    };
+    /**
+     * Workflow description
+     */
+    description?: string | null;
+    /**
+     * Whether the companion workflow action is enabled. Omitted defaults to true.
+     */
+    enabled?: boolean | null;
+    /**
+     * Human-readable label
+     */
+    label: string;
+    /**
+     * Workflow name (becomes filename: {name}.workflow.yaml)
+     */
+    name: string;
+    /**
+     * Output schema (flat format)
+     */
+    out_schema?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Pack reference this workflow belongs to
+     */
+    pack_ref: string;
+    /**
+     * Parameter schema (flat format with inline required/secret)
+     */
+    param_schema?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Pack refs allowed to reference the companion workflow action when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string> | null;
+    reference_visibility?: null | ActionReferenceVisibility;
+    /**
+     * Tags for categorization
+     */
+    tags?: Array<string> | null;
+    /**
+     * Workflow version (semantic versioning recommended)
+     */
+    version: string;
+};
+
+/**
+ * Seal a staging generation into `ready`.
+ */
+export type SealCacheGenerationRequest = {
+    expected_chunk_count: number;
+    expected_record_count?: number | null;
+    expected_size_bytes?: number | null;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
 };
 
 /**
@@ -4899,6 +7727,22 @@ export type SensorSummary = {
 };
 
 /**
+ * Request DTO for setting the full data payload on an artifact
+ */
+export type SetDataRequest = {
+    /**
+     * The data to set (replaces existing data entirely)
+     */
+    data: {
+        [key: string]: unknown;
+    };
+};
+
+export type SourceAvailability = 'available_now' | 'partial' | 'planned';
+
+export type SourceType = 'key_value' | 'latest_action_result' | 'action_result_path' | 'execution_count' | 'execution_timeseries' | 'execution_status_breakdown' | 'execution_duration_stats' | 'last_execution' | 'event_count' | 'event_timeseries' | 'last_event' | 'enforcement_count' | 'enforcement_timeseries' | 'last_enforcement' | 'queue_backlog' | 'queue_throughput' | 'queue_dispatch_stats' | 'inquiry_backlog' | 'inquiry_sla' | 'worker_health' | 'worker_status' | 'sensor_health';
+
+/**
  * Success message response (for operations that don't return data)
  */
 export type SuccessResponse = {
@@ -4927,6 +7771,28 @@ export type TestCaseResult = {
 };
 
 /**
+ * Test result
+ */
+export type TestResult = {
+    /**
+     * Number failed
+     */
+    failed: number;
+    /**
+     * Number passed
+     */
+    passed: number;
+    /**
+     * Test status
+     */
+    status: string;
+    /**
+     * Total number of tests
+     */
+    total_tests: number;
+};
+
+/**
  * Test status enum
  */
 export type TestStatus = 'passed' | 'failed' | 'skipped' | 'error';
@@ -4943,6 +7809,34 @@ export type TestSuiteResult = {
     skipped: number;
     testCases: Array<TestCaseResult>;
     total: number;
+};
+
+/**
+ * A single data point in an hourly time series.
+ */
+export type TimeSeriesPoint = {
+    /**
+     * Start of the 1-hour bucket (ISO 8601)
+     */
+    bucket: string;
+    /**
+     * The series label (e.g., status name, action ref). Null for aggregate totals.
+     */
+    label?: string | null;
+    /**
+     * The count value for this bucket
+     */
+    value: number;
+};
+
+/**
+ * Explicit patch operation for a nullable action default timeout (seconds).
+ */
+export type TimeoutSecondsPatch = {
+    op: 'set';
+    value: number;
+} | {
+    op: 'clear';
 };
 
 /**
@@ -4979,6 +7873,39 @@ export type TokenResponse = {
 };
 
 export type TolerationOperator = 'equal' | 'exists';
+
+export type TraceEnforcementSummary = {
+    condition: EnforcementCondition;
+    created: string;
+    event?: null | I64;
+    id: I64;
+    resolved_at?: string | null;
+    rule?: null | I64;
+    rule_ref: string;
+    status: EnforcementStatus;
+    trigger_ref: string;
+};
+
+export type TraceReportResponse = {
+    enforcements: Array<TraceEnforcementSummary>;
+    events: Array<EventSummary>;
+    executions: Array<ExecutionSummary>;
+    origins: Array<string>;
+    queue_dispatches: Array<TraceWorkQueueDispatchSummary>;
+    queue_items: Array<WorkQueueItemResponse>;
+    trace_tag: string;
+};
+
+export type TraceWorkQueueDispatchSummary = {
+    created: string;
+    execution: I64;
+    id: I64;
+    leased_item_count: number;
+    queue: I64;
+    queue_ref: string;
+    status: WorkQueueDispatchStatus;
+    updated: string;
+};
 
 /**
  * Response DTO for trigger information
@@ -5032,6 +7959,14 @@ export type TriggerResponse = {
      * Unique reference identifier
      */
     ref: string;
+    /**
+     * Pack refs allowed to subscribe to this trigger when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    /**
+     * Pack-level visibility for rule subscriptions.
+     */
+    reference_visibility: ActionReferenceVisibility;
     /**
      * Sensor ID (optional — webhook triggers have no sensor)
      */
@@ -5094,6 +8029,14 @@ export type TriggerSummary = {
      */
     ref: string;
     /**
+     * Pack refs allowed to subscribe to this trigger when visibility is restricted.
+     */
+    reference_allowed_pack_refs?: Array<string>;
+    /**
+     * Pack-level visibility for rule subscriptions.
+     */
+    reference_visibility: ActionReferenceVisibility;
+    /**
      * Last update timestamp
      */
     updated: string;
@@ -5122,6 +8065,10 @@ export type UpdateActionRequest = {
      */
     description?: string | null;
     /**
+     * Whether this action is enabled.
+     */
+    enabled?: boolean | null;
+    /**
      * Entry point for action execution
      */
     entrypoint?: string | null;
@@ -5134,19 +8081,24 @@ export type UpdateActionRequest = {
     /**
      * Output schema
      */
-    out_schema: {
+    out_schema?: {
         [key: string]: unknown;
     } | null;
     /**
      * Parameter schema (StackStorm-style with inline required/secret)
      */
-    param_schema: {
+    param_schema?: {
         [key: string]: unknown;
     } | null;
     /**
+     * Replace the restricted visibility allow-list.
+     */
+    reference_allowed_pack_refs?: Array<string> | null;
+    reference_visibility?: null | ActionReferenceVisibility;
+    /**
      * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
      */
-    required_worker_runtimes: {
+    required_worker_runtimes?: {
         [key: string]: unknown;
     } | null;
     /**
@@ -5158,17 +8110,49 @@ export type UpdateActionRequest = {
      */
     runtime_ref?: string | null;
     runtime_version_constraint?: null | RuntimeVersionConstraintPatch;
+    timeout_seconds?: null | TimeoutSecondsPatch;
     worker_affinity?: null | WorkerAffinity;
     /**
      * Exact worker label requirements. All labels must match the selected worker.
      */
-    worker_selector: {
+    worker_selector?: {
         [key: string]: unknown;
     } | null;
     /**
      * Tolerations that allow scheduling onto workers with matching taints.
      */
     worker_tolerations?: Array<WorkerToleration> | null;
+};
+
+/**
+ * Request DTO for updating an existing artifact
+ */
+export type UpdateArtifactRequest = {
+    content_type?: null | ArtifactStringPatch;
+    data?: null | ArtifactJsonPatch;
+    description?: null | ArtifactStringPatch;
+    name?: null | ArtifactStringPatch;
+    /**
+     * Updated owner identifier
+     */
+    owner?: string | null;
+    /**
+     * Updated retention limit
+     */
+    retention_limit?: number | null;
+    retention_policy?: null | RetentionPolicyType;
+    scope?: null | OwnerType;
+    type?: null | ArtifactType;
+    visibility?: null | ArtifactVisibility;
+};
+
+/**
+ * Update a namespace's publication policy. Owner scope and namespace are
+ * immutable; changing either is a new namespace.
+ */
+export type UpdateCacheNamespaceRequest = CacheNamespacePolicyBody & {
+    owner_ref?: string | null;
+    owner_type: OwnerType;
 };
 
 /**
@@ -5179,6 +8163,22 @@ export type UpdateCurrentUserRequest = {
      * Display name. Empty or whitespace-only values clear the display name.
      */
     display_name?: string | null;
+};
+
+export type UpdateDashboardRequest = {
+    description?: null | DashboardDescriptionPatch;
+    enabled?: boolean | null;
+    expected_revision: number;
+    is_default_home?: boolean | null;
+    label?: string | null;
+    scope_ref?: string | null;
+    scope_type?: null | DashboardScopeType;
+    spec: {
+        [key: string]: unknown;
+    } | null;
+    spec_version?: number | null;
+    tags?: Array<string> | null;
+    visibility?: null | DashboardVisibility;
 };
 
 export type UpdateIdentityRequest = {
@@ -5218,6 +8218,19 @@ export type UpdateKeyRequest = {
      * Update the secret value. Can be a string, object, array, number, or boolean.
      */
     value?: unknown;
+};
+
+/**
+ * Request to update a configured pack registry index.
+ */
+export type UpdatePackRegistryIndexRequest = {
+    enabled?: boolean | null;
+    headers: {
+        [key: string]: unknown;
+    } | null;
+    name?: string | null;
+    position?: number | null;
+    url?: string | null;
 };
 
 /**
@@ -5275,6 +8288,17 @@ export type UpdatePermissionSetRequest = {
     label?: string | null;
 };
 
+export type UpdatePolicyRequest = {
+    concurrency?: null | ConcurrencyPolicyRequest;
+    description?: string | null;
+    enabled?: boolean | null;
+    name?: string | null;
+    priority?: number | null;
+    quotas?: Array<QuotaPolicyRequest> | null;
+    rate_limit?: null | RateLimitPolicyRequest;
+    tags?: Array<string> | null;
+};
+
 /**
  * Request DTO for updating a rule
  */
@@ -5313,6 +8337,11 @@ export type UpdateRuleRequest = {
      * empty array to force no API token.
      */
     permission_set_refs?: Array<string> | null;
+    /**
+     * Optional template used to resolve execution trace tags for this rule.
+     * Omit to keep current value. Provide null to clear.
+     */
+    trace_tag_template?: string | null;
     /**
      * Parameters for trigger configuration and event filtering
      */
@@ -5376,14 +8405,14 @@ export type UpdateSensorRequest = {
     /**
      * Parameter schema (StackStorm-style with inline required/secret)
      */
-    param_schema: {
+    param_schema?: {
         [key: string]: unknown;
     } | null;
     worker_affinity?: null | WorkerAffinity;
     /**
      * Worker labels required for this sensor process.
      */
-    worker_selector: {
+    worker_selector?: {
         [key: string]: unknown;
     } | null;
     /**
@@ -5417,6 +8446,11 @@ export type UpdateTriggerRequest = {
     param_schema: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Replace the restricted visibility allow-list.
+     */
+    reference_allowed_pack_refs?: Array<string> | null;
+    reference_visibility?: null | ActionReferenceVisibility;
 };
 
 export type UpdateWorkQueueItemRequest = {
@@ -5455,6 +8489,16 @@ export type UpdateWorkQueueRequest = {
      * default, or an empty array to force no API token.
      */
     permission_set_refs?: Array<string> | null;
+    /**
+     * Replace the restricted visibility allow-list.
+     */
+    reference_allowed_pack_refs?: Array<string> | null;
+    reference_visibility?: null | ActionReferenceVisibility;
+    /**
+     * Optional template used to resolve execution trace tags for queue dispatches.
+     * Omit to keep current value. Provide null to clear.
+     */
+    trace_tag_template?: string | null;
     update_strategy?: null | WorkQueueUpdateStrategy;
 };
 
@@ -5499,6 +8543,15 @@ export type UpdateWorkflowRequest = {
 };
 
 /**
+ * Upload one numbered ingest chunk.
+ */
+export type UploadCacheChunkRequest = {
+    entries: Array<CacheEntryUpload>;
+    owner_ref?: string | null;
+    owner_type: OwnerType;
+};
+
+/**
  * User information included in token response
  */
 export type UserInfo = {
@@ -5514,6 +8567,20 @@ export type UserInfo = {
      * Identity login
      */
     login: string;
+};
+
+/**
+ * Validation results
+ */
+export type ValidationResults = {
+    /**
+     * Validation errors
+     */
+    errors: Array<string>;
+    /**
+     * Whether validation passed
+     */
+    valid: boolean;
 };
 
 export type Value = unknown;
@@ -5561,6 +8628,17 @@ export type WebhookReceiverResponse = {
 
 export type WorkQueueBatchMode = 'single' | 'batch';
 
+export type WorkQueueDispatchStatus = 'leased' | 'dispatched' | 'completed' | 'failed' | 'released' | 'cancelled';
+
+export type WorkQueueItemBulkOperation = 'cancel' | 'patch_payload' | 'reprioritize';
+
+export type WorkQueueItemJsonPathSelector = {
+    path: string;
+    vars?: {
+        [key: string]: unknown;
+    };
+};
+
 export type WorkQueueItemResponse = {
     ack_summary: {
         [key: string]: unknown;
@@ -5589,6 +8667,7 @@ export type WorkQueueItemResponse = {
     requested_by_execution?: null | I64;
     requested_by_identity?: null | I64;
     status: WorkQueueItemStatus;
+    trace_tag?: string | null;
     updated: string;
 };
 
@@ -5620,7 +8699,10 @@ export type WorkQueueResponse = {
     pack_ref?: string | null;
     permission_set_refs?: Array<string> | null;
     ref: string;
+    reference_allowed_pack_refs: Array<string>;
+    reference_visibility: ActionReferenceVisibility;
     resolved_dispatch_tuning?: null | ResolvedWorkQueueDispatchTuningResponse;
+    trace_tag_template?: string | null;
     update_strategy: WorkQueueUpdateStrategy;
     updated: string;
 };
@@ -5636,6 +8718,9 @@ export type WorkQueueSummary = {
     label: string;
     pack_ref?: string | null;
     ref: string;
+    reference_allowed_pack_refs: Array<string>;
+    reference_visibility: ActionReferenceVisibility;
+    trace_tag_template?: string | null;
     updated: string;
 };
 
@@ -5717,6 +8802,8 @@ export type WorkerToleration = {
 };
 
 export type WorkerType = 'local' | 'remote' | 'container';
+
+export type WorkflowCacheIterationState = 'scanning' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Response DTO for workflow information
@@ -5861,10 +8948,19 @@ export type ListActionsData = {
          */
         page_size?: number;
         /**
+         * Keyword query. Whitespace-separated tokens are AND-matched against
+         * `ref`, `label`, `description`, and `pack_ref` (case-insensitive substring).
+         */
+        q?: string | null;
+        /**
          * When true, only return actions the current token can execute and whose
          * default execution permission sets can be delegated by the current token.
          */
         executable_with_current_access?: boolean;
+        /**
+         * Optional pack ref that wants to reference the returned actions.
+         */
+        referencing_pack_ref?: string | null;
     };
     url: '/api/v1/actions';
 };
@@ -5931,6 +9027,10 @@ export type CreateActionResponses = {
              */
             description?: string | null;
             /**
+             * Whether this action is enabled
+             */
+            enabled: boolean;
+            /**
              * Entry point
              */
             entrypoint: string;
@@ -5976,6 +9076,14 @@ export type CreateActionResponses = {
              */
             ref: string;
             /**
+             * Pack refs allowed to reference this action when visibility is restricted.
+             */
+            reference_allowed_pack_refs?: Array<string>;
+            /**
+             * Pack-level visibility for references from rules, workflows, and queues.
+             */
+            reference_visibility: ActionReferenceVisibility;
+            /**
              * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
              */
             required_worker_runtimes?: {
@@ -5993,6 +9101,10 @@ export type CreateActionResponses = {
              * Semver version constraint for the runtime (e.g., ">=3.12", ">=3.12,<4.0", "~18.0")
              */
             runtime_version_constraint?: string | null;
+            /**
+             * Default execution timeout (seconds) snapshotted onto executions of this action.
+             */
+            timeout_seconds?: number | null;
             /**
              * Last update timestamp
              */
@@ -6040,6 +9152,11 @@ export type SearchActionsData = {
          */
         packs?: string | null;
         /**
+         * Optional pack ref that wants to reference the returned actions.
+         * When set, restricted actions allow-listed for this pack are included.
+         */
+        referencing_pack_ref?: string | null;
+        /**
          * Page number (1-based)
          */
         page?: number;
@@ -6066,6 +9183,36 @@ export type SearchActionsResponses = {
 };
 
 export type SearchActionsResponse = SearchActionsResponses[keyof SearchActionsResponses];
+
+export type ListPoliciesByActionData = {
+    body?: never;
+    path: {
+        /**
+         * Action reference
+         */
+        action_ref: string;
+    };
+    query?: {
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/actions/{action_ref}/policies';
+};
+
+export type ListPoliciesByActionResponses = {
+    /**
+     * List of policies for an action
+     */
+    200: PaginatedResponsePolicySummary;
+};
+
+export type ListPoliciesByActionResponse = ListPoliciesByActionResponses[keyof ListPoliciesByActionResponses];
 
 export type ListRulesByActionData = {
     body?: never;
@@ -6186,6 +9333,10 @@ export type GetActionResponses = {
              */
             description?: string | null;
             /**
+             * Whether this action is enabled
+             */
+            enabled: boolean;
+            /**
              * Entry point
              */
             entrypoint: string;
@@ -6231,6 +9382,14 @@ export type GetActionResponses = {
              */
             ref: string;
             /**
+             * Pack refs allowed to reference this action when visibility is restricted.
+             */
+            reference_allowed_pack_refs?: Array<string>;
+            /**
+             * Pack-level visibility for references from rules, workflows, and queues.
+             */
+            reference_visibility: ActionReferenceVisibility;
+            /**
              * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
              */
             required_worker_runtimes?: {
@@ -6248,6 +9407,10 @@ export type GetActionResponses = {
              * Semver version constraint for the runtime (e.g., ">=3.12", ">=3.12,<4.0", "~18.0")
              */
             runtime_version_constraint?: string | null;
+            /**
+             * Default execution timeout (seconds) snapshotted onto executions of this action.
+             */
+            timeout_seconds?: number | null;
             /**
              * Last update timestamp
              */
@@ -6334,6 +9497,10 @@ export type UpdateActionResponses = {
              */
             description?: string | null;
             /**
+             * Whether this action is enabled
+             */
+            enabled: boolean;
+            /**
              * Entry point
              */
             entrypoint: string;
@@ -6379,6 +9546,14 @@ export type UpdateActionResponses = {
              */
             ref: string;
             /**
+             * Pack refs allowed to reference this action when visibility is restricted.
+             */
+            reference_allowed_pack_refs?: Array<string>;
+            /**
+             * Pack-level visibility for references from rules, workflows, and queues.
+             */
+            reference_visibility: ActionReferenceVisibility;
+            /**
              * Additional worker runtime requirements keyed by runtime name/alias. Use "*" for any available version.
              */
             required_worker_runtimes?: {
@@ -6396,6 +9571,10 @@ export type UpdateActionResponses = {
              * Semver version constraint for the runtime (e.g., ">=3.12", ">=3.12,<4.0", "~18.0")
              */
             runtime_version_constraint?: string | null;
+            /**
+             * Default execution timeout (seconds) snapshotted onto executions of this action.
+             */
+            timeout_seconds?: number | null;
             /**
              * Last update timestamp
              */
@@ -6564,6 +9743,1849 @@ export type AgentInfoResponses = {
 };
 
 export type AgentInfoResponse = AgentInfoResponses[keyof AgentInfoResponses];
+
+export type GetDashboardAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/dashboard';
+};
+
+export type GetDashboardAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Combined dashboard analytics response.
+         *
+         * Returns all key metrics in a single response for the dashboard page,
+         * avoiding multiple round-trips.
+         */
+        data: {
+            /**
+             * Enforcement volume per hour
+             */
+            enforcement_volume: Array<TimeSeriesPoint>;
+            /**
+             * Event volume per hour
+             */
+            event_volume: Array<TimeSeriesPoint>;
+            /**
+             * Execution status transitions per hour
+             */
+            execution_status: Array<TimeSeriesPoint>;
+            /**
+             * Execution throughput per hour
+             */
+            execution_throughput: Array<TimeSeriesPoint>;
+            /**
+             * Execution failure rate summary
+             */
+            failure_rate: FailureRateResponse;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Time range end
+             */
+            until: string;
+            /**
+             * Worker status transitions per hour
+             */
+            worker_status: Array<TimeSeriesPoint>;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetDashboardAnalyticsResponse = GetDashboardAnalyticsResponses[keyof GetDashboardAnalyticsResponses];
+
+export type GetEnforcementVolumeAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/enforcements/volume';
+};
+
+export type GetEnforcementVolumeAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for enforcement volume over time.
+         */
+        data: {
+            /**
+             * Data points: one per bucket (total enforcements created)
+             */
+            data: Array<TimeSeriesPoint>;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Time range end
+             */
+            until: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetEnforcementVolumeAnalyticsResponse = GetEnforcementVolumeAnalyticsResponses[keyof GetEnforcementVolumeAnalyticsResponses];
+
+export type GetEventVolumeAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/events/volume';
+};
+
+export type GetEventVolumeAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for event volume over time.
+         */
+        data: {
+            /**
+             * Data points: one per bucket (total events created)
+             */
+            data: Array<TimeSeriesPoint>;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Time range end
+             */
+            until: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetEventVolumeAnalyticsResponse = GetEventVolumeAnalyticsResponses[keyof GetEventVolumeAnalyticsResponses];
+
+export type GetFailureRateAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/executions/failure-rate';
+};
+
+export type GetFailureRateAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for the execution failure rate summary.
+         */
+        data: {
+            /**
+             * Number of completed executions
+             */
+            completed_count: number;
+            /**
+             * Number of failed executions
+             */
+            failed_count: number;
+            /**
+             * Failure rate as a percentage (0.0 – 100.0)
+             */
+            failure_rate_pct: number;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Number of timed-out executions
+             */
+            timeout_count: number;
+            /**
+             * Total executions reaching a terminal state in the window
+             */
+            total_terminal: number;
+            /**
+             * Time range end
+             */
+            until: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetFailureRateAnalyticsResponse = GetFailureRateAnalyticsResponses[keyof GetFailureRateAnalyticsResponses];
+
+export type GetExecutionStatusAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/executions/status';
+};
+
+export type GetExecutionStatusAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for execution status transitions over time.
+         */
+        data: {
+            /**
+             * Data points: one per (bucket, status) pair
+             */
+            data: Array<TimeSeriesPoint>;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Time range end
+             */
+            until: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetExecutionStatusAnalyticsResponse = GetExecutionStatusAnalyticsResponses[keyof GetExecutionStatusAnalyticsResponses];
+
+export type GetExecutionThroughputAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/executions/throughput';
+};
+
+export type GetExecutionThroughputAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for execution throughput over time.
+         */
+        data: {
+            /**
+             * Data points: one per bucket (total executions created)
+             */
+            data: Array<TimeSeriesPoint>;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Time range end
+             */
+            until: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetExecutionThroughputAnalyticsResponse = GetExecutionThroughputAnalyticsResponses[keyof GetExecutionThroughputAnalyticsResponses];
+
+export type GetWorkerStatusAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         */
+        since?: string | null;
+        /**
+         * End of time range (ISO 8601). Defaults to now.
+         */
+        until?: string | null;
+        /**
+         * Number of hours to look back from now (alternative to since/until).
+         * Ignored if `since` is provided.
+         */
+        hours?: number | null;
+    };
+    url: '/api/v1/analytics/workers/status';
+};
+
+export type GetWorkerStatusAnalyticsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for worker status transitions over time.
+         */
+        data: {
+            /**
+             * Data points: one per (bucket, status) pair
+             */
+            data: Array<TimeSeriesPoint>;
+            /**
+             * Time range start
+             */
+            since: string;
+            /**
+             * Time range end
+             */
+            until: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetWorkerStatusAnalyticsResponse = GetWorkerStatusAnalyticsResponses[keyof GetWorkerStatusAnalyticsResponses];
+
+export type ListArtifactsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by owner scope type
+         */
+        scope?: null | OwnerType;
+        /**
+         * Filter by owner identifier
+         */
+        owner?: string | null;
+        /**
+         * Filter by artifact type
+         */
+        type?: null | ArtifactType;
+        /**
+         * Filter by visibility
+         */
+        visibility?: null | ArtifactVisibility;
+        /**
+         * Filter by classification
+         */
+        classification?: null | ArtifactClassification;
+        /**
+         * Filter to artifacts that have at least one version produced by this execution
+         */
+        execution?: number | null;
+        /**
+         * Search by name (case-insensitive substring match)
+         */
+        name?: string | null;
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Items per page
+         */
+        per_page?: number;
+    };
+    url: '/api/v1/artifacts';
+};
+
+export type ListArtifactsResponses = {
+    /**
+     * List of artifacts
+     */
+    200: PaginatedResponseArtifactSummary;
+};
+
+export type ListArtifactsResponse = ListArtifactsResponses[keyof ListArtifactsResponses];
+
+export type CreateArtifactData = {
+    body: CreateArtifactRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/artifacts';
+};
+
+export type CreateArtifactErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Artifact with same ref already exists
+     */
+    409: unknown;
+};
+
+export type CreateArtifactResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for artifact information
+         */
+        data: {
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            data?: null | Value;
+            /**
+             * Description
+             */
+            description?: string | null;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Retention limit
+             */
+            retention_limit: number;
+            /**
+             * Retention policy
+             */
+            retention_policy: RetentionPolicyType;
+            /**
+             * Owner scope type
+             */
+            scope: OwnerType;
+            /**
+             * Size of the latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CreateArtifactResponse = CreateArtifactResponses[keyof CreateArtifactResponses];
+
+export type GetArtifactByRefData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact reference
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/ref/{ref}';
+};
+
+export type GetArtifactByRefErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type GetArtifactByRefResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for artifact information
+         */
+        data: {
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            data?: null | Value;
+            /**
+             * Description
+             */
+            description?: string | null;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Retention limit
+             */
+            retention_limit: number;
+            /**
+             * Retention policy
+             */
+            retention_policy: RetentionPolicyType;
+            /**
+             * Owner scope type
+             */
+            scope: OwnerType;
+            /**
+             * Size of the latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetArtifactByRefResponse = GetArtifactByRefResponses[keyof GetArtifactByRefResponses];
+
+export type AllocateFileVersionByRefData = {
+    body: AllocateFileVersionByRefRequest;
+    path: {
+        /**
+         * Artifact reference (e.g. 'mypack.build_log')
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/ref/{ref}/versions/file';
+};
+
+export type AllocateFileVersionByRefErrors = {
+    /**
+     * Invalid request (non-file-backed artifact type)
+     */
+    400: unknown;
+};
+
+export type AllocateFileVersionByRefResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type AllocateFileVersionByRefResponse = AllocateFileVersionByRefResponses[keyof AllocateFileVersionByRefResponses];
+
+export type UploadVersionByRefData = {
+    body: ArtifactVersionByRefUploadForm;
+    path: {
+        /**
+         * Artifact reference (created if not found)
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/ref/{ref}/versions/upload';
+};
+
+export type UploadVersionByRefErrors = {
+    /**
+     * Missing file field or invalid metadata
+     */
+    400: unknown;
+    /**
+     * File too large
+     */
+    413: unknown;
+};
+
+export type UploadVersionByRefResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type UploadVersionByRefResponse = UploadVersionByRefResponses[keyof UploadVersionByRefResponses];
+
+export type DeleteArtifactData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}';
+};
+
+export type DeleteArtifactErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type DeleteArtifactResponses = {
+    /**
+     * Artifact deleted
+     */
+    200: SuccessResponse;
+};
+
+export type DeleteArtifactResponse = DeleteArtifactResponses[keyof DeleteArtifactResponses];
+
+export type GetArtifactData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}';
+};
+
+export type GetArtifactErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type GetArtifactResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for artifact information
+         */
+        data: {
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            data?: null | Value;
+            /**
+             * Description
+             */
+            description?: string | null;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Retention limit
+             */
+            retention_limit: number;
+            /**
+             * Retention policy
+             */
+            retention_policy: RetentionPolicyType;
+            /**
+             * Owner scope type
+             */
+            scope: OwnerType;
+            /**
+             * Size of the latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetArtifactResponse = GetArtifactResponses[keyof GetArtifactResponses];
+
+export type UpdateArtifactData = {
+    body: UpdateArtifactRequest;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}';
+};
+
+export type UpdateArtifactErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type UpdateArtifactResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for artifact information
+         */
+        data: {
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            data?: null | Value;
+            /**
+             * Description
+             */
+            description?: string | null;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Retention limit
+             */
+            retention_limit: number;
+            /**
+             * Retention policy
+             */
+            retention_policy: RetentionPolicyType;
+            /**
+             * Owner scope type
+             */
+            scope: OwnerType;
+            /**
+             * Size of the latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type UpdateArtifactResponse = UpdateArtifactResponses[keyof UpdateArtifactResponses];
+
+export type SetArtifactDataData = {
+    body: SetDataRequest;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/data';
+};
+
+export type SetArtifactDataErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type SetArtifactDataResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for artifact information
+         */
+        data: {
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            data?: null | Value;
+            /**
+             * Description
+             */
+            description?: string | null;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Retention limit
+             */
+            retention_limit: number;
+            /**
+             * Retention policy
+             */
+            retention_policy: RetentionPolicyType;
+            /**
+             * Owner scope type
+             */
+            scope: OwnerType;
+            /**
+             * Size of the latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type SetArtifactDataResponse = SetArtifactDataResponses[keyof SetArtifactDataResponses];
+
+export type DownloadLatestData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/download';
+};
+
+export type DownloadLatestErrors = {
+    /**
+     * Artifact not found or no versions
+     */
+    404: unknown;
+};
+
+export type DownloadLatestResponses = {
+    /**
+     * Binary file content of latest version
+     */
+    200: Blob | File;
+};
+
+export type DownloadLatestResponse = DownloadLatestResponses[keyof DownloadLatestResponses];
+
+export type AppendProgressData = {
+    body: AppendProgressRequest;
+    path: {
+        /**
+         * Artifact ID (must be progress type)
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/progress';
+};
+
+export type AppendProgressErrors = {
+    /**
+     * Artifact is not a progress type
+     */
+    400: unknown;
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type AppendProgressResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for artifact information
+         */
+        data: {
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            data?: null | Value;
+            /**
+             * Description
+             */
+            description?: string | null;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Retention limit
+             */
+            retention_limit: number;
+            /**
+             * Retention policy
+             */
+            retention_policy: RetentionPolicyType;
+            /**
+             * Owner scope type
+             */
+            scope: OwnerType;
+            /**
+             * Size of the latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type AppendProgressResponse = AppendProgressResponses[keyof AppendProgressResponses];
+
+export type StreamArtifactData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/stream';
+};
+
+export type StreamArtifactErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Artifact not found or not file-backed
+     */
+    404: unknown;
+};
+
+export type StreamArtifactResponses = {
+    /**
+     * SSE stream of file content
+     */
+    200: unknown;
+};
+
+export type ListVersionsData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions';
+};
+
+export type ListVersionsErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type ListVersionsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number
+             */
+            version: number;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type ListVersionsResponse = ListVersionsResponses[keyof ListVersionsResponses];
+
+export type CreateVersionJsonData = {
+    body: CreateVersionJsonRequest;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions';
+};
+
+export type CreateVersionJsonErrors = {
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type CreateVersionJsonResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CreateVersionJsonResponse = CreateVersionJsonResponses[keyof CreateVersionJsonResponses];
+
+export type CreateVersionFileData = {
+    body: CreateFileVersionRequest;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions/file';
+};
+
+export type CreateVersionFileErrors = {
+    /**
+     * Artifact type is not file-based
+     */
+    400: unknown;
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+};
+
+export type CreateVersionFileResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CreateVersionFileResponse = CreateVersionFileResponses[keyof CreateVersionFileResponses];
+
+export type GetLatestVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions/latest';
+};
+
+export type GetLatestVersionErrors = {
+    /**
+     * Artifact not found or no versions
+     */
+    404: unknown;
+};
+
+export type GetLatestVersionResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetLatestVersionResponse = GetLatestVersionResponses[keyof GetLatestVersionResponses];
+
+export type UploadVersionData = {
+    body: ArtifactVersionUploadForm;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions/upload';
+};
+
+export type UploadVersionErrors = {
+    /**
+     * Missing file field
+     */
+    400: unknown;
+    /**
+     * Artifact not found
+     */
+    404: unknown;
+    /**
+     * File too large
+     */
+    413: unknown;
+};
+
+export type UploadVersionResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type UploadVersionResponse = UploadVersionResponses[keyof UploadVersionResponses];
+
+export type DeleteVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+        /**
+         * Version number
+         */
+        version: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions/{version}';
+};
+
+export type DeleteVersionErrors = {
+    /**
+     * Artifact or version not found
+     */
+    404: unknown;
+};
+
+export type DeleteVersionResponses = {
+    /**
+     * Version deleted
+     */
+    200: SuccessResponse;
+};
+
+export type DeleteVersionResponse = DeleteVersionResponses[keyof DeleteVersionResponses];
+
+export type GetVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+        /**
+         * Version number
+         */
+        version: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions/{version}';
+};
+
+export type GetVersionErrors = {
+    /**
+     * Artifact or version not found
+     */
+    404: unknown;
+};
+
+export type GetVersionResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for an artifact version (without binary content)
+         */
+        data: {
+            /**
+             * Parent artifact ID
+             */
+            artifact: number;
+            content_json?: null | Value;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Who created this version
+             */
+            created_by?: string | null;
+            /**
+             * Execution that produced this version (e.g., the execution that wrote
+             * this log version). Per-version association — the parent artifact may
+             * be linked to many executions across versions.
+             */
+            execution?: number | null;
+            /**
+             * Relative file path for disk-backed versions (from artifacts_dir root).
+             * When present, the file content lives on the shared volume, not in the DB.
+             */
+            file_path?: string | null;
+            /**
+             * Version ID
+             */
+            id: number;
+            meta?: null | Value;
+            /**
+             * Size of content in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Version number (1-based)
+             */
+            version: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetVersionResponse = GetVersionResponses[keyof GetVersionResponses];
+
+export type DownloadVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact ID
+         */
+        id: number;
+        /**
+         * Version number
+         */
+        version: number;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{id}/versions/{version}/download';
+};
+
+export type DownloadVersionErrors = {
+    /**
+     * Artifact, version, or content not found
+     */
+    404: unknown;
+};
+
+export type DownloadVersionResponses = {
+    /**
+     * Binary file content
+     */
+    200: Blob | File;
+};
+
+export type DownloadVersionResponse = DownloadVersionResponses[keyof DownloadVersionResponses];
 
 export type ListAuditEventsData = {
     body?: never;
@@ -6742,6 +11764,1160 @@ export type GetAuditEventResponses = {
 
 export type GetAuditEventResponse = GetAuditEventResponses[keyof GetAuditEventResponses];
 
+export type ListNamespacesData = {
+    body?: never;
+    path?: never;
+    query: {
+        owner_type: OwnerType;
+        owner_ref?: string | null;
+        /**
+         * Case-insensitive namespace substring.
+         */
+        namespace?: string | null;
+        /**
+         * Filter by active-generation freshness state.
+         */
+        freshness?: null | CacheNamespaceFreshness;
+        /**
+         * Requested page size (bounded server-side).
+         */
+        limit?: number | null;
+        /**
+         * Opaque keyset cursor from a prior page.
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/cache/namespaces';
+};
+
+export type ListNamespacesErrors = {
+    /**
+     * Invalid owner selector, filter, limit, or cursor
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Cache scope is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Cache metadata lookup failed
+     */
+    500: ErrorResponse;
+};
+
+export type ListNamespacesError = ListNamespacesErrors[keyof ListNamespacesErrors];
+
+export type ListNamespacesResponses = {
+    /**
+     * Namespaces visible to the caller
+     */
+    200: CacheNamespaceListApiResponse;
+};
+
+export type ListNamespacesResponse = ListNamespacesResponses[keyof ListNamespacesResponses];
+
+export type CreateNamespaceData = {
+    body: CreateCacheNamespaceRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/cache/namespaces';
+};
+
+export type CreateNamespaceErrors = {
+    /**
+     * Invalid owner selector, namespace, or policy
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace creation is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace already exists
+     */
+    409: ErrorResponse;
+    /**
+     * Namespace creation failed
+     */
+    500: ErrorResponse;
+};
+
+export type CreateNamespaceError = CreateNamespaceErrors[keyof CreateNamespaceErrors];
+
+export type CreateNamespaceResponses = {
+    /**
+     * Namespace created
+     */
+    201: CacheNamespaceApiResponse;
+};
+
+export type CreateNamespaceResponse = CreateNamespaceResponses[keyof CreateNamespaceResponses];
+
+export type DeleteNamespaceData = {
+    body?: never;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query: {
+        /**
+         * Owner type: `system`, `identity`, `pack`, `action`, or `sensor`.
+         */
+        owner_type: OwnerType;
+        /**
+         * Owner reference (pack/action/sensor ref). Omitted for system scope.
+         */
+        owner_ref?: string | null;
+    };
+    url: '/api/v1/cache/namespaces/{namespace}';
+};
+
+export type DeleteNamespaceErrors = {
+    /**
+     * Invalid owner selector or namespace
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace deletion is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Namespace deletion conflicts with current state
+     */
+    409: ErrorResponse;
+    /**
+     * Namespace deletion failed
+     */
+    500: ErrorResponse;
+};
+
+export type DeleteNamespaceError = DeleteNamespaceErrors[keyof DeleteNamespaceErrors];
+
+export type DeleteNamespaceResponses = {
+    /**
+     * Namespace tombstoned
+     */
+    200: CacheNamespaceDeletionApiResponse;
+};
+
+export type DeleteNamespaceResponse = DeleteNamespaceResponses[keyof DeleteNamespaceResponses];
+
+export type ShowNamespaceData = {
+    body?: never;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query: {
+        /**
+         * Owner type: `system`, `identity`, `pack`, `action`, or `sensor`.
+         */
+        owner_type: OwnerType;
+        /**
+         * Owner reference (pack/action/sensor ref). Omitted for system scope.
+         */
+        owner_ref?: string | null;
+    };
+    url: '/api/v1/cache/namespaces/{namespace}';
+};
+
+export type ShowNamespaceErrors = {
+    /**
+     * Invalid owner selector or namespace
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Namespace lookup failed
+     */
+    500: ErrorResponse;
+};
+
+export type ShowNamespaceError = ShowNamespaceErrors[keyof ShowNamespaceErrors];
+
+export type ShowNamespaceResponses = {
+    /**
+     * Namespace metadata
+     */
+    200: CacheNamespaceApiResponse;
+};
+
+export type ShowNamespaceResponse = ShowNamespaceResponses[keyof ShowNamespaceResponses];
+
+export type UpdateNamespaceData = {
+    body: UpdateCacheNamespaceRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}';
+};
+
+export type UpdateNamespaceErrors = {
+    /**
+     * Invalid owner selector, namespace, or policy
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace update is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Namespace is deleted or policy update conflicts
+     */
+    409: ErrorResponse;
+    /**
+     * Namespace update failed
+     */
+    500: ErrorResponse;
+};
+
+export type UpdateNamespaceError = UpdateNamespaceErrors[keyof UpdateNamespaceErrors];
+
+export type UpdateNamespaceResponses = {
+    /**
+     * Namespace updated
+     */
+    200: CacheNamespaceApiResponse;
+};
+
+export type UpdateNamespaceResponse = UpdateNamespaceResponses[keyof UpdateNamespaceResponses];
+
+export type ScanEntriesData = {
+    body?: never;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query: {
+        owner_type: OwnerType;
+        owner_ref?: string | null;
+        /**
+         * Requested page size (bounded server-side).
+         */
+        limit?: number | null;
+        require_fresh?: boolean;
+        /**
+         * Pinned generation. Required together with `cursor` on later pages.
+         */
+        generation?: null | I64;
+        /**
+         * Opaque, integrity-protected cursor from a prior page.
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/cache/namespaces/{namespace}/entries';
+};
+
+export type ScanEntriesErrors = {
+    /**
+     * Invalid owner selector, page shape, generation, or cursor
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Cache is stale, unpopulated, deleted, or the snapshot expired
+     */
+    409: ErrorResponse;
+    /**
+     * Cache scan failed
+     */
+    500: ErrorResponse;
+};
+
+export type ScanEntriesError = ScanEntriesErrors[keyof ScanEntriesErrors];
+
+export type ScanEntriesResponses = {
+    /**
+     * One scan page
+     */
+    200: CacheScanPageApiResponse;
+};
+
+export type ScanEntriesResponse = ScanEntriesResponses[keyof ScanEntriesResponses];
+
+export type LookupEntryData = {
+    body: CachePointLookupRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/entries/lookup';
+};
+
+export type LookupEntryErrors = {
+    /**
+     * Invalid owner selector, namespace, or lookup request
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Cache is stale, unpopulated, deleted, or the snapshot expired
+     */
+    409: ErrorResponse;
+    /**
+     * Cache lookup failed
+     */
+    500: ErrorResponse;
+};
+
+export type LookupEntryError = LookupEntryErrors[keyof LookupEntryErrors];
+
+export type LookupEntryResponses = {
+    /**
+     * Lookup result
+     */
+    200: CachePointLookupApiResponse;
+};
+
+export type LookupEntryResponse = LookupEntryResponses[keyof LookupEntryResponses];
+
+export type LookupEntriesData = {
+    body: CacheMultiLookupRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/entries/lookup-many';
+};
+
+export type LookupEntriesErrors = {
+    /**
+     * Invalid owner selector, namespace, or identifier list
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Cache is stale, unpopulated, deleted, or the snapshot expired
+     */
+    409: ErrorResponse;
+    /**
+     * Cache lookup failed
+     */
+    500: ErrorResponse;
+};
+
+export type LookupEntriesError = LookupEntriesErrors[keyof LookupEntriesErrors];
+
+export type LookupEntriesResponses = {
+    /**
+     * Lookup results
+     */
+    200: CacheMultiLookupApiResponse;
+};
+
+export type LookupEntriesResponse = LookupEntriesResponses[keyof LookupEntriesResponses];
+
+export type ListGenerationsData = {
+    body?: never;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query: {
+        owner_type: OwnerType;
+        owner_ref?: string | null;
+        /**
+         * Requested page size (bounded server-side).
+         */
+        limit?: number | null;
+        /**
+         * Opaque keyset cursor from a prior page.
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/cache/namespaces/{namespace}/generations';
+};
+
+export type ListGenerationsErrors = {
+    /**
+     * Invalid owner selector, limit, or cursor
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Generation metadata lookup failed
+     */
+    500: ErrorResponse;
+};
+
+export type ListGenerationsError = ListGenerationsErrors[keyof ListGenerationsErrors];
+
+export type ListGenerationsResponses = {
+    /**
+     * Generations
+     */
+    200: CacheGenerationListApiResponse;
+};
+
+export type ListGenerationsResponse = ListGenerationsResponses[keyof ListGenerationsResponses];
+
+export type CreateGenerationData = {
+    body: CreateCacheGenerationRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/generations';
+};
+
+export type CreateGenerationErrors = {
+    /**
+     * Invalid owner selector, namespace, or generation request
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Generation creation is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace not found
+     */
+    404: ErrorResponse;
+    /**
+     * Refresh id, active-generation precondition, namespace state, or quota conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Generation creation failed
+     */
+    500: ErrorResponse;
+};
+
+export type CreateGenerationError = CreateGenerationErrors[keyof CreateGenerationErrors];
+
+export type CreateGenerationResponses = {
+    /**
+     * Matching idempotent generation replay
+     */
+    200: CacheGenerationApiResponse;
+    /**
+     * Staging generation created
+     */
+    201: CacheGenerationApiResponse;
+};
+
+export type CreateGenerationResponse = CreateGenerationResponses[keyof CreateGenerationResponses];
+
+export type ShowGenerationData = {
+    body?: never;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+        /**
+         * Generation id
+         */
+        generation_id: number;
+    };
+    query: {
+        /**
+         * Owner type: `system`, `identity`, `pack`, `action`, or `sensor`.
+         */
+        owner_type: OwnerType;
+        /**
+         * Owner reference (pack/action/sensor ref). Omitted for system scope.
+         */
+        owner_ref?: string | null;
+    };
+    url: '/api/v1/cache/namespaces/{namespace}/generations/{generation_id}';
+};
+
+export type ShowGenerationErrors = {
+    /**
+     * Invalid owner selector, namespace, or generation id
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Namespace is not accessible
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace or generation not found
+     */
+    404: ErrorResponse;
+    /**
+     * Generation lookup failed
+     */
+    500: ErrorResponse;
+};
+
+export type ShowGenerationError = ShowGenerationErrors[keyof ShowGenerationErrors];
+
+export type ShowGenerationResponses = {
+    /**
+     * Generation
+     */
+    200: CacheGenerationApiResponse;
+};
+
+export type ShowGenerationResponse = ShowGenerationResponses[keyof ShowGenerationResponses];
+
+export type AbandonGenerationData = {
+    body: CacheOwnerBody;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+        /**
+         * Generation id
+         */
+        generation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/generations/{generation_id}/abandon';
+};
+
+export type AbandonGenerationErrors = {
+    /**
+     * Invalid owner selector, namespace, or generation id
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Generation abandonment is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace or generation not found
+     */
+    404: ErrorResponse;
+    /**
+     * Generation cannot be abandoned from its current state
+     */
+    409: ErrorResponse;
+    /**
+     * Generation abandonment failed
+     */
+    500: ErrorResponse;
+};
+
+export type AbandonGenerationError = AbandonGenerationErrors[keyof AbandonGenerationErrors];
+
+export type AbandonGenerationResponses = {
+    /**
+     * Abandoned generation
+     */
+    200: CacheGenerationApiResponse;
+};
+
+export type AbandonGenerationResponse = AbandonGenerationResponses[keyof AbandonGenerationResponses];
+
+export type UploadChunkData = {
+    body: UploadCacheChunkRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+        /**
+         * Generation id
+         */
+        generation_id: number;
+        /**
+         * Zero-based chunk index
+         */
+        chunk_index: number;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/generations/{generation_id}/chunks/{chunk_index}';
+};
+
+export type UploadChunkErrors = {
+    /**
+     * Invalid owner selector, chunk index, or chunk body
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Chunk upload is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace or generation not found
+     */
+    404: ErrorResponse;
+    /**
+     * Chunk, generation state, duplicate identifier, or quota conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Chunk request exceeds the configured body limit
+     */
+    413: string;
+    /**
+     * Chunk upload failed
+     */
+    500: ErrorResponse;
+};
+
+export type UploadChunkError = UploadChunkErrors[keyof UploadChunkErrors];
+
+export type UploadChunkResponses = {
+    /**
+     * Chunk accepted or idempotently replayed
+     */
+    200: CacheGenerationApiResponse;
+};
+
+export type UploadChunkResponse = UploadChunkResponses[keyof UploadChunkResponses];
+
+export type PromoteGenerationData = {
+    body: PromoteCacheGenerationRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+        /**
+         * Generation id
+         */
+        generation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/generations/{generation_id}/promote';
+};
+
+export type PromoteGenerationErrors = {
+    /**
+     * Invalid owner selector, namespace, or promotion request
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Generation promotion is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace or generation not found
+     */
+    404: ErrorResponse;
+    /**
+     * Promotion state or active-generation precondition failed
+     */
+    409: ErrorResponse;
+    /**
+     * Generation promotion failed
+     */
+    500: ErrorResponse;
+};
+
+export type PromoteGenerationError = PromoteGenerationErrors[keyof PromoteGenerationErrors];
+
+export type PromoteGenerationResponses = {
+    /**
+     * Promoted generation
+     */
+    200: CacheGenerationApiResponse;
+};
+
+export type PromoteGenerationResponse = PromoteGenerationResponses[keyof PromoteGenerationResponses];
+
+export type SealGenerationData = {
+    body: SealCacheGenerationRequest;
+    path: {
+        /**
+         * Cache namespace
+         */
+        namespace: string;
+        /**
+         * Generation id
+         */
+        generation_id: number;
+    };
+    query?: never;
+    url: '/api/v1/cache/namespaces/{namespace}/generations/{generation_id}/seal';
+};
+
+export type SealGenerationErrors = {
+    /**
+     * Invalid owner selector, namespace, or seal expectations
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: AuthErrorResponse;
+    /**
+     * Generation sealing is not permitted
+     */
+    403: CacheForbiddenResponse;
+    /**
+     * Namespace or generation not found
+     */
+    404: ErrorResponse;
+    /**
+     * Generation state or seal expectations conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Generation sealing failed
+     */
+    500: ErrorResponse;
+};
+
+export type SealGenerationError = SealGenerationErrors[keyof SealGenerationErrors];
+
+export type SealGenerationResponses = {
+    /**
+     * Sealed generation
+     */
+    200: CacheGenerationApiResponse;
+};
+
+export type SealGenerationResponse = SealGenerationResponses[keyof SealGenerationResponses];
+
+export type ListDashboardsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dashboards';
+};
+
+export type ListDashboardsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListDashboardsResponses = {
+    /**
+     * Visible dashboard summaries
+     */
+    200: ApiResponseVecDashboardListItemResponse;
+};
+
+export type ListDashboardsResponse = ListDashboardsResponses[keyof ListDashboardsResponses];
+
+export type CreateDashboardData = {
+    body: CreateDashboardRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dashboards';
+};
+
+export type CreateDashboardErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Dashboard with same ref already exists in the target scope
+     */
+    409: unknown;
+    /**
+     * Dashboard spec validation failed
+     */
+    422: unknown;
+};
+
+export type CreateDashboardResponses = {
+    /**
+     * Dashboard created successfully
+     */
+    201: ApiResponseDashboardMetadataResponse;
+};
+
+export type CreateDashboardResponse = CreateDashboardResponses[keyof CreateDashboardResponses];
+
+export type PreviewDashboardData = {
+    body: PreviewDashboardRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dashboards/preview';
+};
+
+export type PreviewDashboardErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Dashboard spec validation failed
+     */
+    422: unknown;
+};
+
+export type PreviewDashboardResponses = {
+    /**
+     * Dashboard preview data envelope
+     */
+    200: DashboardDataResponse;
+};
+
+export type PreviewDashboardResponse = PreviewDashboardResponses[keyof PreviewDashboardResponses];
+
+export type GetDashboardSourceCatalogData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dashboards/source-catalog';
+};
+
+export type GetDashboardSourceCatalogErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+};
+
+export type GetDashboardSourceCatalogResponses = {
+    /**
+     * Dashboard source contract catalog
+     */
+    200: ApiResponseDashboardSourceCatalogResponse;
+};
+
+export type GetDashboardSourceCatalogResponse = GetDashboardSourceCatalogResponses[keyof GetDashboardSourceCatalogResponses];
+
+export type DeleteDashboardData = {
+    body?: never;
+    path: {
+        /**
+         * Dashboard reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/dashboards/{ref}';
+};
+
+export type DeleteDashboardErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden or pack-managed dashboard
+     */
+    403: unknown;
+    /**
+     * Dashboard not found
+     */
+    404: unknown;
+};
+
+export type DeleteDashboardResponses = {
+    /**
+     * Dashboard deleted successfully
+     */
+    200: SuccessResponse;
+};
+
+export type DeleteDashboardResponse = DeleteDashboardResponses[keyof DeleteDashboardResponses];
+
+export type GetDashboardData = {
+    body?: never;
+    path: {
+        /**
+         * Dashboard reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/dashboards/{ref}';
+};
+
+export type GetDashboardErrors = {
+    /**
+     * Invalid dashboard ref
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Dashboard not found
+     */
+    404: unknown;
+};
+
+export type GetDashboardResponses = {
+    /**
+     * Dashboard metadata
+     */
+    200: ApiResponseDashboardMetadataResponse;
+};
+
+export type GetDashboardResponse = GetDashboardResponses[keyof GetDashboardResponses];
+
+export type UpdateDashboardData = {
+    body: UpdateDashboardRequest;
+    path: {
+        /**
+         * Dashboard reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/dashboards/{ref}';
+};
+
+export type UpdateDashboardErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden or pack-managed dashboard
+     */
+    403: unknown;
+    /**
+     * Dashboard not found
+     */
+    404: unknown;
+    /**
+     * Revision mismatch or scope conflict
+     */
+    409: unknown;
+    /**
+     * Dashboard spec validation failed
+     */
+    422: unknown;
+};
+
+export type UpdateDashboardResponses = {
+    /**
+     * Dashboard updated successfully
+     */
+    200: ApiResponseDashboardMetadataResponse;
+};
+
+export type UpdateDashboardResponse = UpdateDashboardResponses[keyof UpdateDashboardResponses];
+
+export type CloneDashboardData = {
+    body: CloneDashboardRequest;
+    path: {
+        /**
+         * Dashboard reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/dashboards/{ref}/clone';
+};
+
+export type CloneDashboardErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Dashboard not found
+     */
+    404: unknown;
+    /**
+     * Dashboard with same ref already exists in the target scope
+     */
+    409: unknown;
+    /**
+     * Dashboard spec validation failed
+     */
+    422: unknown;
+};
+
+export type CloneDashboardResponses = {
+    /**
+     * Dashboard cloned successfully
+     */
+    201: ApiResponseDashboardMetadataResponse;
+};
+
+export type CloneDashboardResponse = CloneDashboardResponses[keyof CloneDashboardResponses];
+
+export type GetDashboardDataData = {
+    body: DashboardDataRequest;
+    path: {
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/dashboards/{ref}/data';
+};
+
+export type GetDashboardDataErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Dashboard not found
+     */
+    404: unknown;
+};
+
+export type GetDashboardDataResponses = {
+    /**
+     * Dashboard source data envelope
+     */
+    200: DashboardDataResponse;
+};
+
+export type GetDashboardDataResponse = GetDashboardDataResponses[keyof GetDashboardDataResponses];
+
 export type ListEnforcementsData = {
     body?: never;
     path?: never;
@@ -6766,6 +12942,10 @@ export type ListEnforcementsData = {
          * Filter by rule reference
          */
         rule_ref?: string | null;
+        /**
+         * Filter by exact trace tag on associated executions.
+         */
+        trace_tag?: string | null;
         /**
          * If true, include exact total counts in pagination metadata.
          */
@@ -6802,6 +12982,43 @@ export type ListEnforcementsResponses = {
 
 export type ListEnforcementsResponse = ListEnforcementsResponses[keyof ListEnforcementsResponses];
 
+export type ListExecutionsByEnforcementData = {
+    body?: never;
+    path: {
+        /**
+         * Enforcement ID
+         */
+        enforcement_id: number;
+    };
+    query?: {
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/enforcements/{enforcement_id}/executions';
+};
+
+export type ListExecutionsByEnforcementErrors = {
+    /**
+     * Internal server error
+     */
+    500: unknown;
+};
+
+export type ListExecutionsByEnforcementResponses = {
+    /**
+     * List of executions for enforcement
+     */
+    200: PaginatedResponseExecutionSummary;
+};
+
+export type ListExecutionsByEnforcementResponse = ListExecutionsByEnforcementResponses[keyof ListExecutionsByEnforcementResponses];
+
 export type GetEnforcementData = {
     body?: never;
     path: {
@@ -6810,7 +13027,12 @@ export type GetEnforcementData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include decrypted secret resolved parameter values. Requires enforcements:decrypt.
+         */
+        include_secret_values?: boolean;
+    };
     url: '/api/v1/enforcements/{id}';
 };
 
@@ -6859,6 +13081,10 @@ export type ListEventsData = {
          */
         source?: null | I64;
         /**
+         * Filter by exact trace tag on associated executions.
+         */
+        trace_tag?: string | null;
+        /**
          * If true, include exact total counts in pagination metadata.
          */
         include_total?: boolean | null;
@@ -6894,6 +13120,41 @@ export type ListEventsResponses = {
 
 export type ListEventsResponse = ListEventsResponses[keyof ListEventsResponses];
 
+export type CreateEventData = {
+    body: CreateEventRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/events';
+};
+
+export type CreateEventErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Trigger not found
+     */
+    404: unknown;
+    /**
+     * Internal server error
+     */
+    500: unknown;
+};
+
+export type CreateEventResponses = {
+    /**
+     * Event created successfully
+     */
+    201: ApiResponseEventResponse;
+};
+
+export type CreateEventResponse = CreateEventResponses[keyof CreateEventResponses];
+
 export type GetEventData = {
     body?: never;
     path: {
@@ -6902,7 +13163,12 @@ export type GetEventData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include decrypted secret payload/config values. Requires events:decrypt.
+         */
+        include_secret_values?: boolean;
+    };
     url: '/api/v1/events/{id}';
 };
 
@@ -6958,6 +13224,10 @@ export type ListExecutionsData = {
          */
         trigger_ref?: string | null;
         /**
+         * Filter by exact trace tag.
+         */
+        trace_tag?: string | null;
+        /**
          * Filter by executor ID
          */
         executor?: number | null;
@@ -7004,42 +13274,32 @@ export type ListExecutionsResponses = {
 
 export type ListExecutionsResponse = ListExecutionsResponses[keyof ListExecutionsResponses];
 
-export type ListExecutionsByEnforcementData = {
-    body?: never;
-    path: {
-        /**
-         * Enforcement ID
-         */
-        enforcement_id: number;
-    };
-    query?: {
-        /**
-         * Page number (1-based)
-         */
-        page?: number;
-        /**
-         * Number of items per page
-         */
-        page_size?: number;
-    };
-    url: '/api/v1/executions/enforcement/{enforcement_id}';
+export type CreateExecutionData = {
+    body: CreateExecutionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/executions/execute';
 };
 
-export type ListExecutionsByEnforcementErrors = {
+export type CreateExecutionErrors = {
     /**
-     * Internal server error
+     * Invalid request
      */
-    500: unknown;
-};
-
-export type ListExecutionsByEnforcementResponses = {
+    400: unknown;
     /**
-     * List of executions for enforcement
+     * Action not found
      */
-    200: PaginatedResponseExecutionSummary;
+    404: unknown;
 };
 
-export type ListExecutionsByEnforcementResponse = ListExecutionsByEnforcementResponses[keyof ListExecutionsByEnforcementResponses];
+export type CreateExecutionResponses = {
+    /**
+     * Execution created and queued
+     */
+    201: ExecutionResponse;
+};
+
+export type CreateExecutionResponse = CreateExecutionResponses[keyof CreateExecutionResponses];
 
 export type GetExecutionStatsData = {
     body?: never;
@@ -7107,6 +13367,108 @@ export type ListExecutionsByStatusResponses = {
 
 export type ListExecutionsByStatusResponse = ListExecutionsByStatusResponses[keyof ListExecutionsByStatusResponses];
 
+export type StreamExecutionUpdatesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Optional execution ID to filter updates
+         */
+        execution_id?: number;
+    };
+    url: '/api/v1/executions/stream';
+};
+
+export type StreamExecutionUpdatesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type StreamExecutionUpdatesResponses = {
+    /**
+     * SSE stream of execution updates
+     */
+    200: unknown;
+};
+
+export type ListArtifactsByExecutionData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        execution_id: number;
+    };
+    query?: never;
+    url: '/api/v1/executions/{execution_id}/artifacts';
+};
+
+export type ListArtifactsByExecutionResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            /**
+             * Classification used to distinguish runtime log artifacts from general artifacts.
+             */
+            classification: ArtifactClassification;
+            /**
+             * MIME content type
+             */
+            content_type?: string | null;
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Artifact ID
+             */
+            id: number;
+            /**
+             * Human-readable name
+             */
+            name?: string | null;
+            /**
+             * Owner identifier
+             */
+            owner: string;
+            /**
+             * Artifact reference
+             */
+            ref: string;
+            /**
+             * Owner scope
+             */
+            scope: OwnerType;
+            /**
+             * Size of latest version in bytes
+             */
+            size_bytes?: number | null;
+            /**
+             * Artifact type
+             */
+            type: ArtifactType;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Visibility level
+             */
+            visibility: ArtifactVisibility;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type ListArtifactsByExecutionResponse = ListArtifactsByExecutionResponses[keyof ListArtifactsByExecutionResponses];
+
 export type ListInquiriesByExecutionData = {
     body?: never;
     path: {
@@ -7160,7 +13522,12 @@ export type GetExecutionData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include decrypted secret parameter/result values. Requires executions:decrypt.
+         */
+        include_secret_values?: boolean;
+    };
     url: '/api/v1/executions/{id}';
 };
 
@@ -7243,6 +13610,14 @@ export type GetExecutionResponses = {
              */
             status: ExecutionStatus;
             /**
+             * Resolved execution timeout in seconds, snapshotted at creation time.
+             */
+            timeout_seconds?: number | null;
+            /**
+             * System-wide trace tag for correlating related automatic activity.
+             */
+            trace_tag?: string | null;
+            /**
              * Last update timestamp
              */
             updated: string;
@@ -7283,6 +13658,418 @@ export type GetExecutionResponses = {
 };
 
 export type GetExecutionResponse = GetExecutionResponses[keyof GetExecutionResponses];
+
+export type CancelExecutionData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/executions/{id}/cancel';
+};
+
+export type CancelExecutionErrors = {
+    /**
+     * Execution not found
+     */
+    404: unknown;
+    /**
+     * Execution is not in a cancellable state
+     */
+    409: unknown;
+};
+
+export type CancelExecutionResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for execution information
+         */
+        data: {
+            /**
+             * Action ID (optional, may be null for ad-hoc executions)
+             */
+            action?: number | null;
+            /**
+             * Action reference
+             */
+            action_ref: string;
+            /**
+             * Retention limit override for non-log artifacts created by this execution.
+             */
+            artifact_retention_limit?: number | null;
+            artifact_retention_policy?: null | RetentionPolicyType;
+            /**
+             * Execution configuration/parameters
+             */
+            config: {
+                [key: string]: unknown;
+            };
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Enforcement ID (rule enforcement that triggered this)
+             */
+            enforcement?: number | null;
+            /**
+             * Identity ID that initiated this execution
+             */
+            executor?: number | null;
+            /**
+             * Execution ID
+             */
+            id: number;
+            /**
+             * ID of the original execution if this execution is a retry.
+             */
+            original_execution?: number | null;
+            /**
+             * Parent execution ID (for nested/child executions)
+             */
+            parent?: number | null;
+            /**
+             * Permission set refs embedded in the execution-scoped API token.
+             */
+            permission_set_refs?: Array<string>;
+            /**
+             * Execution result/output
+             */
+            result: {
+                [key: string]: unknown;
+            };
+            /**
+             * When the execution actually started running (worker picked it up).
+             * Null if the execution hasn't started running yet.
+             */
+            started_at?: string | null;
+            /**
+             * Execution status
+             */
+            status: ExecutionStatus;
+            /**
+             * Resolved execution timeout in seconds, snapshotted at creation time.
+             */
+            timeout_seconds?: number | null;
+            /**
+             * System-wide trace tag for correlating related automatic activity.
+             */
+            trace_tag?: string | null;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Worker ID currently assigned to this execution
+             */
+            worker?: number | null;
+            /**
+             * Worker affinity override stored on the execution, if any.
+             */
+            worker_affinity?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Worker selector override stored on the execution, if any.
+             */
+            worker_selector?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Worker tolerations override stored on the execution, if any.
+             */
+            worker_tolerations?: Array<{
+                [key: string]: unknown;
+            }> | null;
+            /**
+             * Workflow task metadata (only populated for workflow task executions)
+             */
+            workflow_task?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CancelExecutionResponse = CancelExecutionResponses[keyof CancelExecutionResponses];
+
+export type GetExecutionHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Filter by entity ID
+         */
+        entity_id?: number | null;
+        /**
+         * Filter by entity ref (e.g., action_ref, worker name)
+         */
+        entity_ref?: string | null;
+        /**
+         * Filter by operation type: `INSERT`, `UPDATE`, or `DELETE`
+         */
+        operation?: string | null;
+        /**
+         * Only include records where this field was changed
+         */
+        changed_field?: string | null;
+        /**
+         * Only include records at or after this time (ISO 8601)
+         */
+        since?: string | null;
+        /**
+         * Only include records at or before this time (ISO 8601)
+         */
+        until?: string | null;
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/executions/{id}/history';
+};
+
+export type GetExecutionHistoryResponses = {
+    /**
+     * History records for the execution
+     */
+    200: PaginatedResponseHistoryRecordResponse;
+};
+
+export type GetExecutionHistoryResponse = GetExecutionHistoryResponses[keyof GetExecutionHistoryResponses];
+
+export type StreamExecutionLogData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        id: number;
+        /**
+         * Log stream name: stdout or stderr
+         */
+        stream: string;
+    };
+    query?: {
+        /**
+         * Resume streaming from this byte offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/executions/{id}/logs/{stream}/stream';
+};
+
+export type StreamExecutionLogErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Execution not found
+     */
+    404: unknown;
+};
+
+export type StreamExecutionLogResponses = {
+    /**
+     * SSE stream of execution log content
+     */
+    200: unknown;
+};
+
+export type RescheduleExecutionData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/executions/{id}/reschedule';
+};
+
+export type RescheduleExecutionErrors = {
+    /**
+     * Execution not found
+     */
+    404: unknown;
+    /**
+     * Execution is not eligible for reschedule
+     */
+    409: unknown;
+};
+
+export type RescheduleExecutionResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for manual execution reschedule requests.
+         */
+        data: {
+            /**
+             * Number of reschedule attempts recorded for this execution.
+             */
+            attempt_count: number;
+            /**
+             * Current execution row after republish.
+             */
+            execution: ExecutionResponse;
+            /**
+             * Timestamp for the recorded reschedule attempt.
+             */
+            last_attempt_at: string;
+            /**
+             * Human-readable status of the republish request.
+             */
+            message: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type RescheduleExecutionResponse = RescheduleExecutionResponses[keyof RescheduleExecutionResponses];
+
+export type ListWorkflowCacheIterationsData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/executions/{id}/workflow-cache-iterations';
+};
+
+export type ListWorkflowCacheIterationsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Execution is not visible to the caller
+     */
+    403: unknown;
+    /**
+     * Execution not found
+     */
+    404: unknown;
+};
+
+export type ListWorkflowCacheIterationsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            batch_size: number;
+            completed_at?: string | null;
+            concurrency: number;
+            created: string;
+            dispatched_count: number;
+            error_summary?: string | null;
+            generation_id: number;
+            namespace_id: number;
+            page_size: number;
+            scanned_count: number;
+            state: WorkflowCacheIterationState;
+            task_name: string;
+            updated: string;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type ListWorkflowCacheIterationsResponse = ListWorkflowCacheIterationsResponses[keyof ListWorkflowCacheIterationsResponses];
+
+export type ListEntityHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Entity type: execution or worker
+         */
+        entity_type: string;
+    };
+    query?: {
+        /**
+         * Filter by entity ID
+         */
+        entity_id?: number | null;
+        /**
+         * Filter by entity ref (e.g., action_ref, worker name)
+         */
+        entity_ref?: string | null;
+        /**
+         * Filter by operation type: `INSERT`, `UPDATE`, or `DELETE`
+         */
+        operation?: string | null;
+        /**
+         * Only include records where this field was changed
+         */
+        changed_field?: string | null;
+        /**
+         * Only include records at or after this time (ISO 8601)
+         */
+        since?: string | null;
+        /**
+         * Only include records at or before this time (ISO 8601)
+         */
+        until?: string | null;
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/history/{entity_type}';
+};
+
+export type ListEntityHistoryErrors = {
+    /**
+     * Invalid entity type
+     */
+    400: unknown;
+};
+
+export type ListEntityHistoryResponses = {
+    /**
+     * Paginated list of history records
+     */
+    200: PaginatedResponseHistoryRecordResponse;
+};
+
+export type ListEntityHistoryResponse = ListEntityHistoryResponses[keyof ListEntityHistoryResponses];
 
 export type ListIdentitiesData = {
     body?: never;
@@ -7409,6 +14196,10 @@ export type DeleteIdentityErrors = {
      * Identity not found
      */
     404: unknown;
+    /**
+     * Identity cache cleanup is pending
+     */
+    409: unknown;
 };
 
 export type DeleteIdentityResponses = {
@@ -8161,6 +14952,218 @@ export type RespondToInquiryResponses = {
 
 export type RespondToInquiryResponse = RespondToInquiryResponses[keyof RespondToInquiryResponses];
 
+export type DeleteFileHandlerData = {
+    body?: never;
+    path: {
+        /**
+         * Relative artifact file path
+         */
+        file_path: string;
+    };
+    query?: never;
+    url: '/api/v1/internal/files/{file_path}';
+};
+
+export type DeleteFileHandlerErrors = {
+    /**
+     * Invalid file path
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * File not found
+     */
+    404: unknown;
+};
+
+export type DeleteFileHandlerResponses = {
+    /**
+     * File deleted
+     */
+    204: void;
+};
+
+export type DeleteFileHandlerResponse = DeleteFileHandlerResponses[keyof DeleteFileHandlerResponses];
+
+export type DownloadFileData = {
+    body?: never;
+    path: {
+        /**
+         * Relative artifact file path
+         */
+        file_path: string;
+    };
+    query?: never;
+    url: '/api/v1/internal/files/{file_path}';
+};
+
+export type DownloadFileErrors = {
+    /**
+     * Invalid file path
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * File not found
+     */
+    404: unknown;
+};
+
+export type DownloadFileResponses = {
+    /**
+     * File content
+     */
+    200: Blob | File;
+};
+
+export type DownloadFileResponse = DownloadFileResponses[keyof DownloadFileResponses];
+
+export type CheckFileData = {
+    body?: never;
+    path: {
+        /**
+         * Relative artifact file path
+         */
+        file_path: string;
+    };
+    query?: never;
+    url: '/api/v1/internal/files/{file_path}';
+};
+
+export type CheckFileErrors = {
+    /**
+     * Invalid file path
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * File not found
+     */
+    404: unknown;
+};
+
+export type CheckFileResponses = {
+    /**
+     * File exists; size is returned in Content-Length
+     */
+    200: unknown;
+};
+
+export type AppendToFileData = {
+    body: string;
+    path: {
+        /**
+         * Relative artifact file path
+         */
+        file_path: string;
+    };
+    query?: never;
+    url: '/api/v1/internal/files/{file_path}';
+};
+
+export type AppendToFileErrors = {
+    /**
+     * Invalid file path
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Payload too large
+     */
+    413: unknown;
+};
+
+export type AppendToFileResponses = {
+    /**
+     * File content appended
+     */
+    204: void;
+};
+
+export type AppendToFileResponse = AppendToFileResponses[keyof AppendToFileResponses];
+
+export type UploadFileData = {
+    body: string;
+    path: {
+        /**
+         * Relative artifact file path
+         */
+        file_path: string;
+    };
+    query?: never;
+    url: '/api/v1/internal/files/{file_path}';
+};
+
+export type UploadFileErrors = {
+    /**
+     * Invalid file path
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Payload too large
+     */
+    413: unknown;
+};
+
+export type UploadFileResponses = {
+    /**
+     * File uploaded
+     */
+    201: unknown;
+};
+
+export type DownloadPackArchiveData = {
+    body?: never;
+    path: {
+        /**
+         * Pack reference identifier
+         */
+        pack_ref: string;
+    };
+    query?: never;
+    url: '/api/v1/internal/packs/{pack_ref}/archive';
+};
+
+export type DownloadPackArchiveErrors = {
+    /**
+     * Invalid pack reference
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Pack not found
+     */
+    404: unknown;
+};
+
+export type DownloadPackArchiveResponses = {
+    /**
+     * Pack archive
+     */
+    200: Blob | File;
+};
+
+export type DownloadPackArchiveResponse = DownloadPackArchiveResponses[keyof DownloadPackArchiveResponses];
+
 export type ListKeysData = {
     body?: never;
     path?: never;
@@ -8270,7 +15273,7 @@ export type CreateKeyResponses = {
              */
             updated: string;
             /**
-             * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+             * The value. Encrypted values are null unless explicitly decrypted.
              */
             value: unknown;
         };
@@ -8319,7 +15322,12 @@ export type GetKeyData = {
          */
         ref: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Explicitly decrypt an encrypted value. Requires keys:decrypt; otherwise encrypted values remain null.
+         */
+        decrypt?: boolean;
+    };
     url: '/api/v1/keys/{ref}';
 };
 
@@ -8388,7 +15396,7 @@ export type GetKeyResponses = {
              */
             updated: string;
             /**
-             * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+             * The value. Encrypted values are null unless explicitly decrypted.
              */
             value: unknown;
         };
@@ -8482,7 +15490,7 @@ export type UpdateKeyResponses = {
              */
             updated: string;
             /**
-             * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+             * The value. Encrypted values are null unless explicitly decrypted.
              */
             value: unknown;
         };
@@ -8495,18 +15503,304 @@ export type UpdateKeyResponses = {
 
 export type UpdateKeyResponse = UpdateKeyResponses[keyof UpdateKeyResponses];
 
-export type ListPacksData = {
+export type ListPackIndicesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/pack-indices';
+};
+
+export type ListPackIndicesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+};
+
+export type ListPackIndicesResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            created: string;
+            enabled: boolean;
+            headers: {
+                [key: string]: unknown;
+            };
+            id: number;
+            name?: string | null;
+            position: number;
+            updated: string;
+            url: string;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type ListPackIndicesResponse = ListPackIndicesResponses[keyof ListPackIndicesResponses];
+
+export type CreatePackIndexData = {
+    body: CreatePackRegistryIndexRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/pack-indices';
+};
+
+export type CreatePackIndexErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+};
+
+export type CreatePackIndexResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * API-managed pack registry index configuration.
+         */
+        data: {
+            created: string;
+            enabled: boolean;
+            headers: {
+                [key: string]: unknown;
+            };
+            id: number;
+            name?: string | null;
+            position: number;
+            updated: string;
+            url: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CreatePackIndexResponse = CreatePackIndexResponses[keyof CreatePackIndexResponses];
+
+export type BrowseIndexedPacksData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Page number (1-based)
+         * Text to match against indexed packs
          */
-        page?: number;
+        q?: string;
         /**
-         * Number of items per page
+         * Restrict results to a configured registry index
          */
+        registry_id?: number;
+        /**
+         * Include disabled registry indices
+         */
+        include_disabled?: boolean;
+    };
+    url: '/api/v1/pack-indices/packs';
+};
+
+export type BrowseIndexedPacksErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+};
+
+export type BrowseIndexedPacksResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            pack: PackIndexEntry;
+            registry: PackRegistryIndexSummary;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type BrowseIndexedPacksResponse = BrowseIndexedPacksResponses[keyof BrowseIndexedPacksResponses];
+
+export type GetIndexedPackData = {
+    body?: never;
+    path: {
+        /**
+         * Indexed pack reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/pack-indices/packs/{ref}';
+};
+
+export type GetIndexedPackErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Indexed pack not found
+     */
+    404: unknown;
+};
+
+export type GetIndexedPackResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Indexed pack summary with the registry it was resolved from.
+         */
+        data: {
+            pack: PackIndexEntry;
+            registry: PackRegistryIndexSummary;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetIndexedPackResponse = GetIndexedPackResponses[keyof GetIndexedPackResponses];
+
+export type DeletePackIndexData = {
+    body?: never;
+    path: {
+        /**
+         * Pack registry index ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/pack-indices/{id}';
+};
+
+export type DeletePackIndexErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Pack registry index not found
+     */
+    404: unknown;
+};
+
+export type DeletePackIndexResponses = {
+    /**
+     * Pack registry index deleted
+     */
+    200: SuccessResponse;
+};
+
+export type DeletePackIndexResponse = DeletePackIndexResponses[keyof DeletePackIndexResponses];
+
+export type UpdatePackIndexData = {
+    body: UpdatePackRegistryIndexRequest;
+    path: {
+        /**
+         * Pack registry index ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/pack-indices/{id}';
+};
+
+export type UpdatePackIndexErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Pack registry index not found
+     */
+    404: unknown;
+};
+
+export type UpdatePackIndexResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * API-managed pack registry index configuration.
+         */
+        data: {
+            created: string;
+            enabled: boolean;
+            headers: {
+                [key: string]: unknown;
+            };
+            id: number;
+            name?: string | null;
+            position: number;
+            updated: string;
+            url: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type UpdatePackIndexResponse = UpdatePackIndexResponses[keyof UpdatePackIndexResponses];
+
+export type ListPacksData = {
+    body?: never;
+    path?: never;
+    query?: {
+        page?: number;
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across ref, label, and description.
+         */
+        q?: string | null;
     };
     url: '/api/v1/packs';
 };
@@ -8619,6 +15913,75 @@ export type CreatePackResponses = {
 
 export type CreatePackResponse = CreatePackResponses[keyof CreatePackResponses];
 
+export type BuildPackEnvsData = {
+    body: BuildPackEnvsRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/packs/build-envs';
+};
+
+export type BuildPackEnvsErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+};
+
+export type BuildPackEnvsResponses = {
+    /**
+     * Environments built
+     */
+    200: ApiResponseBuildPackEnvsResponse;
+};
+
+export type BuildPackEnvsResponse2 = BuildPackEnvsResponses[keyof BuildPackEnvsResponses];
+
+export type GetPackDependenciesData = {
+    body: GetPackDependenciesRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/packs/dependencies';
+};
+
+export type GetPackDependenciesErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+};
+
+export type GetPackDependenciesResponses = {
+    /**
+     * Dependencies analyzed
+     */
+    200: ApiResponseGetPackDependenciesResponse;
+};
+
+export type GetPackDependenciesResponse2 = GetPackDependenciesResponses[keyof GetPackDependenciesResponses];
+
+export type DownloadPacksData = {
+    body: DownloadPacksRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/packs/download';
+};
+
+export type DownloadPacksErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+};
+
+export type DownloadPacksResponses = {
+    /**
+     * Packs downloaded
+     */
+    200: ApiResponseDownloadPacksResponse;
+};
+
+export type DownloadPacksResponse2 = DownloadPacksResponses[keyof DownloadPacksResponses];
+
 export type InstallPackData = {
     body: InstallPackRequest;
     path?: never;
@@ -8677,6 +16040,75 @@ export type RegisterPackResponses = {
 
 export type RegisterPackResponse = RegisterPackResponses[keyof RegisterPackResponses];
 
+export type RegisterPacksBatchData = {
+    body: RegisterPacksRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/packs/register-batch';
+};
+
+export type RegisterPacksBatchErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+};
+
+export type RegisterPacksBatchResponses = {
+    /**
+     * Packs registered
+     */
+    200: ApiResponseRegisterPacksResponse;
+};
+
+export type RegisterPacksBatchResponse = RegisterPacksBatchResponses[keyof RegisterPacksBatchResponses];
+
+export type UploadPackData = {
+    body: PackUploadForm;
+    path?: never;
+    query?: never;
+    url: '/api/v1/packs/upload';
+};
+
+export type UploadPackErrors = {
+    /**
+     * Invalid archive or missing pack.yaml
+     */
+    400: unknown;
+    /**
+     * Pack already exists (use force=true to overwrite)
+     */
+    409: unknown;
+};
+
+export type UploadPackResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response for pack install/register operations with test results
+         */
+        data: {
+            /**
+             * The installed/registered pack
+             */
+            pack: PackResponse;
+            test_result?: null | PackTestResult;
+            /**
+             * Whether tests were skipped
+             */
+            tests_skipped: boolean;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type UploadPackResponse = UploadPackResponses[keyof UploadPackResponses];
+
 export type ListActionsByPackData = {
     body?: never;
     path: {
@@ -8694,6 +16126,11 @@ export type ListActionsByPackData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Whitespace-separated tokens are AND-matched against
+         * the catalog item's discovery fields.
+         */
+        q?: string | null;
     };
     url: '/api/v1/packs/{pack_ref}/actions';
 };
@@ -8714,6 +16151,36 @@ export type ListActionsByPackResponses = {
 
 export type ListActionsByPackResponse = ListActionsByPackResponses[keyof ListActionsByPackResponses];
 
+export type ListPoliciesByPackData = {
+    body?: never;
+    path: {
+        /**
+         * Pack reference
+         */
+        pack_ref: string;
+    };
+    query?: {
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/packs/{pack_ref}/policies';
+};
+
+export type ListPoliciesByPackResponses = {
+    /**
+     * List of policies for a pack
+     */
+    200: PaginatedResponsePolicySummary;
+};
+
+export type ListPoliciesByPackResponse = ListPoliciesByPackResponses[keyof ListPoliciesByPackResponses];
+
 export type ListQueuesByPackData = {
     body?: never;
     path: {
@@ -8723,9 +16190,13 @@ export type ListQueuesByPackData = {
         pack_ref: string;
     };
     query?: {
-        enabled?: boolean | null;
-        is_adhoc?: boolean | null;
-        search?: string | null;
+        enabled?: boolean;
+        is_adhoc?: boolean;
+        search?: string;
+        /**
+         * Pack ref that intends to target/submit to this queue; used to reveal allowed restricted queues.
+         */
+        referencing_pack_ref?: string;
         page?: number;
         per_page?: number;
     };
@@ -8769,6 +16240,11 @@ export type ListRulesByPackData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Whitespace-separated tokens are AND-matched against
+         * the catalog item's discovery fields.
+         */
+        q?: string | null;
     };
     url: '/api/v1/packs/{pack_ref}/rules';
 };
@@ -8847,6 +16323,11 @@ export type ListSensorsByPackData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Whitespace-separated tokens are AND-matched against
+         * the catalog item's discovery fields.
+         */
+        q?: string | null;
     };
     url: '/api/v1/packs/{pack_ref}/sensors';
 };
@@ -8888,6 +16369,11 @@ export type ListTriggersByPackData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Whitespace-separated tokens are AND-matched against
+         * the catalog item's discovery fields.
+         */
+        q?: string | null;
     };
     url: '/api/v1/packs/{pack_ref}/triggers';
 };
@@ -8911,6 +16397,114 @@ export type ListTriggersByPackResponses = {
 };
 
 export type ListTriggersByPackResponse = ListTriggersByPackResponses[keyof ListTriggersByPackResponses];
+
+export type SaveWorkflowFileData = {
+    body: SaveWorkflowFileRequest;
+    path: {
+        /**
+         * Pack reference identifier
+         */
+        pack_ref: string;
+    };
+    query?: never;
+    url: '/api/v1/packs/{pack_ref}/workflow-files';
+};
+
+export type SaveWorkflowFileErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Pack not found
+     */
+    404: unknown;
+    /**
+     * Workflow with same ref already exists
+     */
+    409: unknown;
+    /**
+     * Failed to write workflow file
+     */
+    500: unknown;
+};
+
+export type SaveWorkflowFileResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    201: {
+        /**
+         * Response DTO for workflow information
+         */
+        data: {
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Workflow definition
+             */
+            definition: {
+                [key: string]: unknown;
+            };
+            /**
+             * Workflow description
+             */
+            description?: string | null;
+            /**
+             * Workflow ID
+             */
+            id: number;
+            /**
+             * Human-readable label
+             */
+            label: string;
+            /**
+             * Output schema
+             */
+            out_schema: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Pack ID
+             */
+            pack: number;
+            /**
+             * Pack reference
+             */
+            pack_ref: string;
+            /**
+             * Parameter schema (StackStorm-style with inline required/secret)
+             */
+            param_schema: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Unique reference identifier
+             */
+            ref: string;
+            /**
+             * Tags
+             */
+            tags: Array<string>;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Workflow version
+             */
+            version: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type SaveWorkflowFileResponse = SaveWorkflowFileResponses[keyof SaveWorkflowFileResponses];
 
 export type ListWorkflowsByPackData = {
     body?: never;
@@ -9180,6 +16774,32 @@ export type UpdatePackResponses = {
 };
 
 export type UpdatePackResponse = UpdatePackResponses[keyof UpdatePackResponses];
+
+export type GetPackIconData = {
+    body?: never;
+    path: {
+        /**
+         * Pack reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/packs/{ref}/icon';
+};
+
+export type GetPackIconErrors = {
+    /**
+     * Pack icon not found
+     */
+    404: unknown;
+};
+
+export type GetPackIconResponses = {
+    /**
+     * Pack icon image
+     */
+    200: unknown;
+};
 
 export type TestPackData = {
     body?: never;
@@ -9677,13 +17297,120 @@ export type CreatePermissionSetRoleAssignmentResponses = {
 
 export type CreatePermissionSetRoleAssignmentResponse = CreatePermissionSetRoleAssignmentResponses[keyof CreatePermissionSetRoleAssignmentResponses];
 
+export type ListPoliciesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        page?: number;
+        page_size?: number;
+        pack_ref?: string | null;
+        action_ref?: string | null;
+        scope?: null | PolicyScopeType;
+        enabled?: boolean | null;
+        tag?: string | null;
+    };
+    url: '/api/v1/policies';
+};
+
+export type ListPoliciesResponses = {
+    /**
+     * List of policies
+     */
+    200: PaginatedResponsePolicySummary;
+};
+
+export type ListPoliciesResponse = ListPoliciesResponses[keyof ListPoliciesResponses];
+
+export type CreatePolicyData = {
+    body: CreatePolicyRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/policies';
+};
+
+export type CreatePolicyResponses = {
+    /**
+     * Policy created
+     */
+    201: ApiResponsePolicyResponse;
+};
+
+export type CreatePolicyResponse = CreatePolicyResponses[keyof CreatePolicyResponses];
+
+export type DeletePolicyData = {
+    body?: never;
+    path: {
+        /**
+         * Policy reference
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/policies/{ref}';
+};
+
+export type DeletePolicyResponses = {
+    /**
+     * Policy deleted
+     */
+    200: ApiResponseSuccessResponse;
+};
+
+export type DeletePolicyResponse = DeletePolicyResponses[keyof DeletePolicyResponses];
+
+export type GetPolicyData = {
+    body?: never;
+    path: {
+        /**
+         * Policy reference
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/policies/{ref}';
+};
+
+export type GetPolicyResponses = {
+    /**
+     * Policy details
+     */
+    200: ApiResponsePolicyResponse;
+};
+
+export type GetPolicyResponse = GetPolicyResponses[keyof GetPolicyResponses];
+
+export type UpdatePolicyData = {
+    body: UpdatePolicyRequest;
+    path: {
+        /**
+         * Policy reference
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/policies/{ref}';
+};
+
+export type UpdatePolicyResponses = {
+    /**
+     * Policy updated
+     */
+    200: ApiResponsePolicyResponse;
+};
+
+export type UpdatePolicyResponse = UpdatePolicyResponses[keyof UpdatePolicyResponses];
+
 export type ListQueuesData = {
     body?: never;
     path?: never;
     query?: {
-        enabled?: boolean | null;
-        is_adhoc?: boolean | null;
-        search?: string | null;
+        enabled?: boolean;
+        is_adhoc?: boolean;
+        search?: string;
+        /**
+         * Pack ref that intends to target/submit to this queue; used to reveal allowed restricted queues.
+         */
+        referencing_pack_ref?: string;
         page?: number;
         per_page?: number;
     };
@@ -9774,7 +17501,17 @@ export type GetQueueData = {
          */
         ref: string;
     };
-    query?: never;
+    query?: {
+        enabled?: boolean;
+        is_adhoc?: boolean;
+        search?: string;
+        /**
+         * Pack ref that intends to target/submit to this queue; used to reveal allowed restricted queues.
+         */
+        referencing_pack_ref?: string;
+        page?: number;
+        per_page?: number;
+    };
     url: '/api/v1/queues/{ref}';
 };
 
@@ -9837,13 +17574,14 @@ export type ListQueueItemsData = {
          * Queue reference identifier
          */
         ref: string;
-        item_key: string | null;
-        enqueue_source: string | null;
-        statuses: Array<WorkQueueItemStatus>;
-        page: number;
-        per_page: number;
     };
-    query?: never;
+    query?: {
+        item_key?: string;
+        enqueue_source?: string;
+        statuses?: Array<WorkQueueItemStatus>;
+        page?: number;
+        per_page?: number;
+    };
     url: '/api/v1/queues/{ref}/items';
 };
 
@@ -9910,6 +17648,122 @@ export type EnqueueQueueItemResponses = {
 };
 
 export type EnqueueQueueItemResponse = EnqueueQueueItemResponses[keyof EnqueueQueueItemResponses];
+
+export type BulkEnqueueQueueItemsData = {
+    body: BulkEnqueueWorkQueueItemsRequest;
+    path: {
+        /**
+         * Queue reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/queues/{ref}/items/bulk';
+};
+
+export type BulkEnqueueQueueItemsErrors = {
+    /**
+     * Validation error or configured bulk enqueue limit exceeded
+     */
+    400: unknown;
+    /**
+     * Insufficient permissions
+     */
+    403: unknown;
+    /**
+     * Queue not found
+     */
+    404: unknown;
+    /**
+     * Queue is not accepting items or pending item conflict
+     */
+    409: unknown;
+};
+
+export type BulkEnqueueQueueItemsResponses = {
+    /**
+     * Queue items enqueued or pending items updated
+     */
+    200: ApiResponseBulkEnqueueWorkQueueItemsResponse;
+    /**
+     * Queue items enqueued
+     */
+    201: ApiResponseBulkEnqueueWorkQueueItemsResponse;
+};
+
+export type BulkEnqueueQueueItemsResponse = BulkEnqueueQueueItemsResponses[keyof BulkEnqueueQueueItemsResponses];
+
+export type ApplyQueueItemsBySelectorData = {
+    body: ApplyWorkQueueItemsRequest;
+    path: {
+        /**
+         * Queue reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/queues/{ref}/items/query/apply';
+};
+
+export type ApplyQueueItemsBySelectorErrors = {
+    /**
+     * Validation error or invalid SQL/JSONPath selector
+     */
+    400: unknown;
+    /**
+     * Insufficient permissions
+     */
+    403: unknown;
+    /**
+     * Queue not found
+     */
+    404: unknown;
+};
+
+export type ApplyQueueItemsBySelectorResponses = {
+    /**
+     * Bulk queue item operation applied
+     */
+    200: ApiResponseApplyWorkQueueItemsResponse;
+};
+
+export type ApplyQueueItemsBySelectorResponse = ApplyQueueItemsBySelectorResponses[keyof ApplyQueueItemsBySelectorResponses];
+
+export type PreviewQueueItemsBySelectorData = {
+    body: PreviewWorkQueueItemsRequest;
+    path: {
+        /**
+         * Queue reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/queues/{ref}/items/query/preview';
+};
+
+export type PreviewQueueItemsBySelectorErrors = {
+    /**
+     * Validation error or invalid SQL/JSONPath selector
+     */
+    400: unknown;
+    /**
+     * Insufficient permissions
+     */
+    403: unknown;
+    /**
+     * Queue not found
+     */
+    404: unknown;
+};
+
+export type PreviewQueueItemsBySelectorResponses = {
+    /**
+     * Preview queue items selected by a SQL/JSONPath selector
+     */
+    200: ApiResponsePreviewWorkQueueItemsResponse;
+};
+
+export type PreviewQueueItemsBySelectorResponse = PreviewQueueItemsBySelectorResponses[keyof PreviewQueueItemsBySelectorResponses];
 
 export type DeleteQueueItemData = {
     body?: never;
@@ -10073,6 +17927,27 @@ export type ListRulesData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across ref, label, description,
+         * pack_ref, action_ref, and trigger_ref.
+         */
+        q?: string | null;
+        /**
+         * Optional pack ref filter
+         */
+        pack_ref?: string | null;
+        /**
+         * Optional action ref filter
+         */
+        action_ref?: string | null;
+        /**
+         * Optional trigger ref filter
+         */
+        trigger_ref?: string | null;
+        /**
+         * Optional enabled-state filter
+         */
+        enabled?: boolean | null;
     };
     url: '/api/v1/rules';
 };
@@ -10328,14 +18203,13 @@ export type ListRuntimesData = {
     body?: never;
     path?: never;
     query?: {
-        /**
-         * Page number (1-based)
-         */
         page?: number;
-        /**
-         * Number of items per page
-         */
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across ref, name, description,
+         * and pack_ref.
+         */
+        q?: string | null;
     };
     url: '/api/v1/runtimes';
 };
@@ -10480,6 +18354,11 @@ export type ListSensorsData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across ref, label, description,
+         * and pack_ref.
+         */
+        q?: string | null;
     };
     url: '/api/v1/sensors';
 };
@@ -10731,6 +18610,102 @@ export type EnableSensorResponses = {
 
 export type EnableSensorResponse = EnableSensorResponses[keyof EnableSensorResponses];
 
+export type ListSensorLogsData = {
+    body?: never;
+    path: {
+        /**
+         * Sensor reference (e.g., core.timer)
+         */
+        sensor_ref: string;
+    };
+    query?: never;
+    url: '/api/v1/sensors/{sensor_ref}/logs';
+};
+
+export type ListSensorLogsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListSensorLogsResponses = {
+    /**
+     * Sensor log summary
+     */
+    200: unknown;
+};
+
+export type GetSensorLogData = {
+    body?: never;
+    path: {
+        /**
+         * Sensor reference (e.g., core.timer)
+         */
+        sensor_ref: string;
+        /**
+         * Log stream: stdout or stderr
+         */
+        stream: string;
+    };
+    query?: never;
+    url: '/api/v1/sensors/{sensor_ref}/logs/{stream}';
+};
+
+export type GetSensorLogErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Sensor log not found
+     */
+    404: unknown;
+};
+
+export type GetSensorLogResponses = {
+    /**
+     * Log file content
+     */
+    200: unknown;
+};
+
+export type GetTraceReportData = {
+    body?: never;
+    path: {
+        /**
+         * Exact trace tag to report
+         */
+        trace_tag: string;
+    };
+    query?: never;
+    url: '/api/v1/traces/{trace_tag}';
+};
+
+export type GetTraceReportErrors = {
+    /**
+     * Invalid trace tag
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Insufficient permissions
+     */
+    403: unknown;
+};
+
+export type GetTraceReportResponses = {
+    /**
+     * Trace activity report
+     */
+    200: ApiResponseTraceReportResponse;
+};
+
+export type GetTraceReportResponse = GetTraceReportResponses[keyof GetTraceReportResponses];
+
 export type ListTriggersData = {
     body?: never;
     path?: never;
@@ -10743,6 +18718,15 @@ export type ListTriggersData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across ref, label, description,
+         * and pack_ref.
+         */
+        q?: string | null;
+        /**
+         * Optional pack ref that wants to subscribe to the returned triggers.
+         */
+        referencing_pack_ref?: string | null;
     };
     url: '/api/v1/triggers';
 };
@@ -10810,6 +18794,15 @@ export type ListEnabledTriggersData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across ref, label, description,
+         * and pack_ref.
+         */
+        q?: string | null;
+        /**
+         * Optional pack ref that wants to subscribe to the returned triggers.
+         */
+        referencing_pack_ref?: string | null;
     };
     url: '/api/v1/triggers/enabled';
 };
@@ -10870,7 +18863,12 @@ export type GetTriggerData = {
          */
         ref: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Optional pack ref that wants to subscribe to this trigger.
+         */
+        referencing_pack_ref?: string | null;
+    };
     url: '/api/v1/triggers/{ref}';
 };
 
@@ -11218,6 +19216,11 @@ export type ListWorkersData = {
     query?: {
         page?: number;
         page_size?: number;
+        /**
+         * Keyword query. Tokens are AND-matched across name, host, status,
+         * worker type, and worker role.
+         */
+        q?: string | null;
         role?: null | WorkerRole;
         status?: null | WorkerStatus;
         cordoned?: boolean | null;
@@ -11283,6 +19286,60 @@ export type CordonWorkerResponses = {
 };
 
 export type CordonWorkerResponse = CordonWorkerResponses[keyof CordonWorkerResponses];
+
+export type GetWorkerHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Worker ID
+         */
+        id: number;
+    };
+    query?: {
+        /**
+         * Filter by entity ID
+         */
+        entity_id?: number | null;
+        /**
+         * Filter by entity ref (e.g., action_ref, worker name)
+         */
+        entity_ref?: string | null;
+        /**
+         * Filter by operation type: `INSERT`, `UPDATE`, or `DELETE`
+         */
+        operation?: string | null;
+        /**
+         * Only include records where this field was changed
+         */
+        changed_field?: string | null;
+        /**
+         * Only include records at or after this time (ISO 8601)
+         */
+        since?: string | null;
+        /**
+         * Only include records at or before this time (ISO 8601)
+         */
+        until?: string | null;
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/workers/{id}/history';
+};
+
+export type GetWorkerHistoryResponses = {
+    /**
+     * History records for the worker
+     */
+    200: PaginatedResponseHistoryRecordResponse;
+};
+
+export type GetWorkerHistoryResponse = GetWorkerHistoryResponses[keyof GetWorkerHistoryResponses];
 
 export type UncordonWorkerData = {
     body?: never;
@@ -11665,6 +19722,128 @@ export type UpdateWorkflowResponses = {
 
 export type UpdateWorkflowResponse = UpdateWorkflowResponses[keyof UpdateWorkflowResponses];
 
+export type UpdateWorkflowFileData = {
+    body: SaveWorkflowFileRequest;
+    path: {
+        /**
+         * Workflow reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/workflows/{ref}/file';
+};
+
+export type UpdateWorkflowFileErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Workflow not found
+     */
+    404: unknown;
+    /**
+     * Failed to write workflow file
+     */
+    500: unknown;
+};
+
+export type UpdateWorkflowFileResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response DTO for workflow information
+         */
+        data: {
+            /**
+             * Creation timestamp
+             */
+            created: string;
+            /**
+             * Workflow definition
+             */
+            definition: {
+                [key: string]: unknown;
+            };
+            /**
+             * Workflow description
+             */
+            description?: string | null;
+            /**
+             * Workflow ID
+             */
+            id: number;
+            /**
+             * Human-readable label
+             */
+            label: string;
+            /**
+             * Output schema
+             */
+            out_schema: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Pack ID
+             */
+            pack: number;
+            /**
+             * Pack reference
+             */
+            pack_ref: string;
+            /**
+             * Parameter schema (StackStorm-style with inline required/secret)
+             */
+            param_schema: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Unique reference identifier
+             */
+            ref: string;
+            /**
+             * Tags
+             */
+            tags: Array<string>;
+            /**
+             * Last update timestamp
+             */
+            updated: string;
+            /**
+             * Workflow version
+             */
+            version: string;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type UpdateWorkflowFileResponse = UpdateWorkflowFileResponses[keyof UpdateWorkflowFileResponses];
+
+export type OidcCallbackData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/callback';
+};
+
+export type OidcCallbackErrors = {
+    /**
+     * Invalid OIDC callback
+     */
+    400: unknown;
+    /**
+     * OIDC authentication failed
+     */
+    401: unknown;
+};
+
 export type ChangePasswordData = {
     body: ChangePasswordRequest;
     path?: never;
@@ -11713,6 +19892,50 @@ export type ChangePasswordResponses = {
 };
 
 export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
+
+export type CreateSensorTokenInternalData = {
+    body: InternalCreateSensorTokenRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/internal/sensor-token';
+};
+
+export type CreateSensorTokenInternalErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type CreateSensorTokenInternalResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for sensor token creation
+         */
+        data: {
+            expires_at: string;
+            identity_id: number;
+            pack_ref?: string | null;
+            permission_set_refs: Array<string>;
+            sensor_ref: string;
+            token: string;
+            trigger_types: Array<string>;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CreateSensorTokenInternalResponse = CreateSensorTokenInternalResponses[keyof CreateSensorTokenInternalResponses];
 
 export type LdapLoginData = {
     body: LdapLoginRequest;
@@ -11821,6 +20044,13 @@ export type LoginResponses = {
 };
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
+
+export type LogoutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/logout';
+};
 
 export type GetCurrentUserData = {
     body?: never;
@@ -11970,6 +20200,29 @@ export type UpdateCurrentUserResponses = {
 
 export type UpdateCurrentUserResponse = UpdateCurrentUserResponses[keyof UpdateCurrentUserResponses];
 
+export type OidcLoginData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Application path to return to after login
+         */
+        redirect_to?: string;
+        /**
+         * Local CLI callback URI
+         */
+        cli_redirect_uri?: string;
+    };
+    url: '/auth/oidc/login';
+};
+
+export type OidcLoginErrors = {
+    /**
+     * OIDC is not configured
+     */
+    501: unknown;
+};
+
 export type RefreshTokenData = {
     body: RefreshTokenRequest;
     path?: never;
@@ -12077,6 +20330,54 @@ export type RegisterResponses = {
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
+
+export type CreateSensorTokenData = {
+    body: CreateSensorTokenRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/sensor-token';
+};
+
+export type CreateSensorTokenErrors = {
+    /**
+     * Validation error
+     */
+    400: unknown;
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+};
+
+export type CreateSensorTokenResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Response for sensor token creation
+         */
+        data: {
+            expires_at: string;
+            identity_id: number;
+            pack_ref?: string | null;
+            permission_set_refs: Array<string>;
+            sensor_ref: string;
+            token: string;
+            trigger_types: Array<string>;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type CreateSensorTokenResponse = CreateSensorTokenResponses[keyof CreateSensorTokenResponses];
 
 export type AuthSettingsData = {
     body?: never;

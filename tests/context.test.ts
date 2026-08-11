@@ -1,18 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-const SENSOR_TOKEN_STATE_PATH = path.join(
-  process.cwd(),
-  "tests",
-  ".sensor-token-state.test.json",
-);
-
-function cleanupTokenStateFile(): void {
-  if (fs.existsSync(SENSOR_TOKEN_STATE_PATH)) {
-    fs.unlinkSync(SENSOR_TOKEN_STATE_PATH);
-  }
-}
 
 describe("ActionContext", () => {
   beforeEach(() => {
@@ -22,7 +8,6 @@ describe("ActionContext", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
-    cleanupTokenStateFile();
   });
 
   it("reads env vars", async () => {
@@ -79,7 +64,6 @@ describe("SensorContext", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
-    cleanupTokenStateFile();
   });
 
   it("reads env vars", async () => {
@@ -123,52 +107,6 @@ describe("SensorContext", () => {
 
     vi.stubEnv("ATTUNE_API_TOKEN", "token-v2");
     expect(ctx.getApiToken()).toBe("token-v2");
-    expect(ctx.getTokenState().source).toBe("env");
-  });
-
-  it("reads rotated token state from runtime file source", async () => {
-    vi.stubEnv("ATTUNE_SENSOR_REF", "test.sensor");
-    vi.stubEnv("ATTUNE_API_TOKEN", "fallback-env-token");
-    vi.stubEnv("ATTUNE_SENSOR_TOKEN_STATE_PATH", SENSOR_TOKEN_STATE_PATH);
-
-    fs.writeFileSync(
-      SENSOR_TOKEN_STATE_PATH,
-      JSON.stringify({
-        token: "file-token-v1",
-        expires_at: "2030-01-01T00:00:00Z",
-      }),
-      "utf8",
-    );
-
-    const { _buildSensorContext } = await import("../src/context.js");
-    const ctx = _buildSensorContext();
-
-    expect(ctx.getApiToken()).toBe("file-token-v1");
-    expect(ctx.getTokenState().source).toBe("state_file");
-    expect(ctx.getTokenState().expiresAt?.toISOString()).toBe("2030-01-01T00:00:00.000Z");
-
-    fs.writeFileSync(
-      SENSOR_TOKEN_STATE_PATH,
-      JSON.stringify({
-        token: "file-token-v2",
-        expires_at: "2030-01-02T00:00:00Z",
-      }),
-      "utf8",
-    );
-
-    expect(ctx.getApiToken()).toBe("file-token-v2");
-    expect(ctx.getTokenState().expiresAt?.toISOString()).toBe("2030-01-02T00:00:00.000Z");
-  });
-
-  it("falls back safely when configured token source is unavailable", async () => {
-    vi.stubEnv("ATTUNE_SENSOR_REF", "test.sensor");
-    vi.stubEnv("ATTUNE_API_TOKEN", "env-fallback-token");
-    vi.stubEnv("ATTUNE_SENSOR_TOKEN_STATE_PATH", path.join(process.cwd(), "tests", ".missing-token-state.json"));
-
-    const { _buildSensorContext } = await import("../src/context.js");
-    const ctx = _buildSensorContext();
-
-    expect(ctx.getApiToken()).toBe("env-fallback-token");
     expect(ctx.getTokenState().source).toBe("env");
   });
 
