@@ -1,6 +1,6 @@
 {
   "name": "attune-sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Node.js SDK for building Attune actions and sensors",
   "license": "Apache-2.0",
   "repository": {
@@ -42,7 +42,7 @@
     "prepack": "npm run build",
     "test:package": "node scripts/package-smoke.mjs",
     "generate-client": "./scripts/generate-client.sh",
-    "generate-client:check": "./scripts/generate-client.sh --check ../attune.wiki/openapi.json"
+    "generate-client:check": "./scripts/generate-client.sh --check ../attune/web/openapi.json"
   },
   "engines": {
     "node": ">=18"

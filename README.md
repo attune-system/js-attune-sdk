@@ -2,7 +2,7 @@
 
 A lightweight TypeScript package providing boilerplate for writing [Attune](https://github.com/attune-system/attune) actions and sensors.
 
-Version 0.3.0 is compatible with Attune 0.3.0 and its OpenAPI 0.3.0 contract.
+Version 0.4.0 is compatible with Attune 0.4.0 and its OpenAPI 0.4.0 contract.
 
 ## Installation
 
@@ -88,13 +88,34 @@ Generated operations take a single options object. Path, query, and JSON body
 values remain separate:
 
 ```typescript
-import { createEvent, getKey, installPack } from "attune-sdk/api_client";
+import {
+  createEvent,
+  createKey,
+  deleteKey,
+  getKey,
+  installPack,
+  updateKey,
+} from "attune-sdk/api_client";
 
-const key = await getKey({
+const created = await createKey({
   client,
-  path: { ref: "deploy-token" },
-  query: { decrypt: true },
+  body: {
+    local_ref: "deploy_token",
+    owner_type: "pack",
+    owner_pack_ref: "deployments",
+    name: "Deployment token",
+    value: "secret",
+    encrypted: true,
+  },
 });
+if (!created.data) throw new Error("Key creation failed");
+
+// Attune constructs the canonical ref. Responses also retain the local ref.
+const { ref, local_ref } = created.data.data;
+const key = await getKey({ client, path: { ref } });
+await updateKey({ client, path: { ref }, body: { name: "Production deployment token" } });
+await deleteKey({ client, path: { ref } });
+
 await installPack({
   client,
   body: { source: "https://github.com/example/pack.git", no_registry: true },
@@ -104,6 +125,13 @@ await createEvent({
   body: { trigger_ref: "monitor.alert", payload: { severity: "high" } },
 });
 ```
+
+Key creation requires `local_ref` and `owner_type`. For identity, pack, action,
+and sensor scopes, pass the matching textual owner field:
+`owner_identity_login`, `owner_pack_ref`, `owner_action_ref`, or
+`owner_sensor_ref`. Do not send `ref`; the server generates the canonical value.
+Use that canonical `ref` for get, update, and delete. `getKey` decrypts the value
+according to the caller's permission and has no decrypt query parameter.
 
 ### Legacy HTTP Client
 
@@ -317,7 +345,7 @@ npm run generate-client
 # From a local spec file
 ./scripts/generate-client.sh /path/to/openapi.json
 
-# Verify checked-in output without replacing it
+# Verify checked-in output against ../attune/web/openapi.json without replacing it
 npm run generate-client:check
 
 # From a custom API URL
