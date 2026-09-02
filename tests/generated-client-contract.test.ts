@@ -9,6 +9,7 @@ import {
   deleteKey,
   getKey,
   installPack,
+  listNamespaces,
   listWorkflowCacheIterations,
   saveWorkflowFile,
   updateKey,
@@ -78,6 +79,20 @@ describe("generated OpenAPI client contracts", () => {
 
     expect(new Set(expected).size).toBe(expected.length);
     expect(actual).toEqual(expected);
+  });
+
+  it("lists cache namespaces without an owner selector", async () => {
+    const list = operation("/api/v1/cache/namespaces", "get");
+    expect(list.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "owner_type", in: "query", required: false }),
+      ]),
+    );
+
+    const { client, requests } = recordingClient();
+    await listNamespaces({ client });
+
+    expect(requests[0].url).toBe("https://attune.test/api/v1/cache/namespaces");
   });
 
   it("creates keys from local refs and textual owner refs", async () => {

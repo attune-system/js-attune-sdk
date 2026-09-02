@@ -514,9 +514,9 @@ export const getAuditEvent = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * List cache namespaces for one owner scope.
+ * List cache namespaces visible to the caller, optionally within one owner scope.
  */
-export const listNamespaces = <ThrowOnError extends boolean = false>(options: Options<ListNamespacesData, ThrowOnError>) => (options.client ?? client).get<ListNamespacesResponses, ListNamespacesErrors, ThrowOnError>({
+export const listNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListNamespacesResponses, ListNamespacesErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/cache/namespaces',
     ...options

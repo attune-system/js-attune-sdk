@@ -11995,8 +11995,8 @@ export type GetAuditEventResponse = GetAuditEventResponses[keyof GetAuditEventRe
 export type ListNamespacesData = {
     body?: never;
     path?: never;
-    query: {
-        owner_type: OwnerType;
+    query?: {
+        owner_type?: null | OwnerType;
         owner_ref?: string | null;
         /**
          * Case-insensitive namespace substring.
