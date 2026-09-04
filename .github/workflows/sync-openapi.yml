@@ -1,0 +1,77 @@
+name: Sync OpenAPI client
+
+on:
+  repository_dispatch:
+    types: [attune-openapi-updated]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Attune commit containing web/openapi.json
+        required: true
+        type: string
+      spec_sha256:
+        description: Expected SHA-256 digest
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-openapi-client
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    env:
+      SOURCE_SHA: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
+      SPEC_SHA256: ${{ github.event.client_payload.spec_sha256 || inputs.spec_sha256 }}
+    steps:
+      - name: Validate source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SPEC_SHA256" =~ ^[0-9a-f]{64}$ ]]
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Download OpenAPI specification
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/attune-system/attune/${SOURCE_SHA}/web/openapi.json" \
+            --output "$RUNNER_TEMP/openapi.json"
+          printf '%s  %s\n' "$SPEC_SHA256" "$RUNNER_TEMP/openapi.json" | sha256sum --check
+
+      - name: Regenerate and test client
+        env:
+          ATTUNE_OPENAPI_SPEC: ${{ runner.temp }}/openapi.json
+        run: |
+          npm ci
+          ./scripts/generate-client.sh "$ATTUNE_OPENAPI_SPEC"
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Create SDK update pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          branch: automation/openapi-sync
+          delete-branch: true
+          commit-message: Regenerate client from Attune OpenAPI
+          title: Regenerate client from Attune OpenAPI
+          body: |
+            Generated from attune-system/attune@${{ env.SOURCE_SHA }}.
+
+            OpenAPI SHA-256: `${{ env.SPEC_SHA256 }}`
