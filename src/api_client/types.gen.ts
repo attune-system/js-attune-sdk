@@ -1735,6 +1735,15 @@ export type ApiResponseRuleResponse = {
          * Unique reference identifier
          */
         ref: string;
+        sensor_worker_affinity: {
+            [key: string]: unknown;
+        };
+        sensor_worker_selector: {
+            [key: string]: unknown;
+        };
+        sensor_worker_tolerations: Array<{
+            [key: string]: unknown;
+        }>;
         /**
          * Optional template used to resolve execution trace tags for this rule.
          */
@@ -3770,6 +3779,24 @@ export type CreateRuleRequest = {
      */
     ref: string;
     /**
+     * Required and preferred sensor-worker affinity for this rule.
+     */
+    sensor_worker_affinity?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Required labels for the sensor worker that runs this rule's managed sensor.
+     */
+    sensor_worker_selector?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Taints tolerated by the sensor worker for this rule.
+     */
+    sensor_worker_tolerations?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
      * Optional template used to resolve execution trace tags for this rule.
      */
     trace_tag_template?: string | null;
@@ -3897,34 +3924,6 @@ export type CreateSensorRequest = {
      * Worker taints tolerated by this sensor process.
      */
     worker_tolerations?: Array<WorkerToleration>;
-};
-
-/**
- * Request body for creating sensor tokens
- */
-export type CreateSensorTokenRequest = {
-    /**
-     * Registered pack reference. Internal worker callers must provide it;
-     * public callers may omit it and let the API resolve it.
-     */
-    pack_ref?: string | null;
-    /**
-     * Explicit sensor cache permission-set refs. `standard` grants read-only
-     * access to the registered sensor and pack cache scopes.
-     */
-    permission_set_refs?: Array<string>;
-    /**
-     * Sensor reference (e.g., "core.timer")
-     */
-    sensor_ref: string;
-    /**
-     * List of trigger types this sensor can create events for
-     */
-    trigger_types: Array<string>;
-    /**
-     * Optional TTL in seconds (default: 86400 = 24 hours, max: 259200 = 72 hours)
-     */
-    ttl_seconds?: number | null;
 };
 
 /**
@@ -5218,6 +5217,10 @@ export type IntegrationTokenResponse = {
  */
 export type InternalCreateSensorTokenRequest = {
     /**
+     * Current sensor workload assignment generation (required for worker/service callers).
+     */
+    assignment_generation?: number | null;
+    /**
      * Registered pack reference (required for worker/service callers).
      */
     pack_ref?: string | null;
@@ -5238,6 +5241,14 @@ export type InternalCreateSensorTokenRequest = {
      * Optional TTL in seconds (default: 86400 = 24 hours, max: 259200 = 72 hours)
      */
     ttl_seconds?: number | null;
+    /**
+     * Worker process instance that owns the assignment (required for worker/service callers).
+     */
+    worker_instance?: string | null;
+    /**
+     * Assigned sensor workload ID (required for worker/service callers).
+     */
+    workload_id?: number | null;
 };
 
 /**
@@ -6699,6 +6710,15 @@ export type PaginatedResponseRuleSummary = {
          * Unique reference identifier
          */
         ref: string;
+        sensor_worker_affinity: {
+            [key: string]: unknown;
+        };
+        sensor_worker_selector: {
+            [key: string]: unknown;
+        };
+        sensor_worker_tolerations: Array<{
+            [key: string]: unknown;
+        }>;
         /**
          * Optional template used to resolve execution trace tags for this rule.
          */
@@ -7602,6 +7622,15 @@ export type RuleResponse = {
      * Unique reference identifier
      */
     ref: string;
+    sensor_worker_affinity: {
+        [key: string]: unknown;
+    };
+    sensor_worker_selector: {
+        [key: string]: unknown;
+    };
+    sensor_worker_tolerations: Array<{
+        [key: string]: unknown;
+    }>;
     /**
      * Optional template used to resolve execution trace tags for this rule.
      */
@@ -7673,6 +7702,15 @@ export type RuleSummary = {
      * Unique reference identifier
      */
     ref: string;
+    sensor_worker_affinity: {
+        [key: string]: unknown;
+    };
+    sensor_worker_selector: {
+        [key: string]: unknown;
+    };
+    sensor_worker_tolerations: Array<{
+        [key: string]: unknown;
+    }>;
     /**
      * Optional template used to resolve execution trace tags for this rule.
      */
@@ -8565,6 +8603,24 @@ export type UpdateRuleRequest = {
      * empty array to force no API token.
      */
     permission_set_refs?: Array<string> | null;
+    /**
+     * Replacement sensor-worker affinity.
+     */
+    sensor_worker_affinity: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Replacement sensor-worker selector.
+     */
+    sensor_worker_selector: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Replacement sensor-worker tolerations.
+     */
+    sensor_worker_tolerations: Array<{
+        [key: string]: unknown;
+    }> | null;
     /**
      * Optional template used to resolve execution trace tags for this rule.
      * Omit to keep current value. Provide null to clear.
@@ -13359,6 +13415,10 @@ export type CreateEventErrors = {
      * Unauthorized
      */
     401: unknown;
+    /**
+     * Token is not authorized to create this event
+     */
+    403: unknown;
     /**
      * Trigger not found
      */
@@ -20443,6 +20503,9 @@ export type CreateSensorTokenInternalResponses = {
             sensor_ref: string;
             token: string;
             trigger_types: Array<string>;
+            workload_fence?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * Optional message
@@ -20846,54 +20909,6 @@ export type RegisterResponses = {
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
-
-export type CreateSensorTokenData = {
-    body: CreateSensorTokenRequest;
-    path?: never;
-    query?: never;
-    url: '/auth/sensor-token';
-};
-
-export type CreateSensorTokenErrors = {
-    /**
-     * Validation error
-     */
-    400: unknown;
-    /**
-     * Unauthorized
-     */
-    401: unknown;
-    /**
-     * Forbidden
-     */
-    403: unknown;
-};
-
-export type CreateSensorTokenResponses = {
-    /**
-     * Standard API response wrapper
-     */
-    200: {
-        /**
-         * Response for sensor token creation
-         */
-        data: {
-            expires_at: string;
-            identity_id: number;
-            pack_ref?: string | null;
-            permission_set_refs: Array<string>;
-            sensor_ref: string;
-            token: string;
-            trigger_types: Array<string>;
-        };
-        /**
-         * Optional message
-         */
-        message?: string | null;
-    };
-};
-
-export type CreateSensorTokenResponse = CreateSensorTokenResponses[keyof CreateSensorTokenResponses];
 
 export type AuthSettingsData = {
     body?: never;
