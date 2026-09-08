@@ -1,34 +1,115 @@
 name: Publish to npm
+run-name: Publish ${{ inputs.version || github.event.release.tag_name }}
 
 on:
   release:
     types: [published]
-  workflow_call:
+  workflow_dispatch:
     inputs:
-      prerelease:
-        required: true
-        type: boolean
-      ref:
+      release_ref:
+        description: Immutable commit containing the verified release
         required: true
         type: string
       version:
+        description: Version expected at the release commit
         required: true
         type: string
 
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: publish-${{ inputs.version || github.event.release.tag_name }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    if: ${{ inputs.ref != '' || github.event_name == 'release' }}
+  prepare:
+    name: Validate release
     runs-on: ubuntu-latest
-    environment: npm
+    outputs:
+      published: ${{ steps.release.outputs.published }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      ref: ${{ steps.release.outputs.ref }}
+      version: ${{ steps.release.outputs.version }}
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.ref || github.event.release.tag_name }}
+          fetch-depth: 0
+          ref: ${{ inputs.release_ref || github.event.release.tag_name }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+
+      - name: Validate release identity
+        id: release
+        env:
+          EXPECTED_VERSION: ${{ inputs.version || github.event.release.tag_name }}
+          RELEASE_REF: ${{ inputs.release_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(node -p "require('./package.json').version")"
+          test "$actual" = "${EXPECTED_VERSION#v}"
+
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git rev-parse HEAD)" = "$RELEASE_REF"
+            git merge-base --is-ancestor "$RELEASE_REF" "origin/${{ github.event.repository.default_branch }}"
+          fi
+
+          test "$(jq -r .version .attune-openapi-source.json)" = "$actual"
+          source_ref="$(jq -r .source_ref .attune-openapi-source.json)"
+          spec_sha256="$(jq -r .spec_sha256 .attune-openapi-source.json)"
+          [[ "$source_ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]
+          [[ "$spec_sha256" =~ ^[0-9a-f]{64}$ ]]
+
+          curl --fail --silent --show-error --location \
+            "https://github.com/attune-system/attune/releases/download/${source_ref}/attune-openapi.json" \
+            --output "$RUNNER_TEMP/openapi.json"
+          printf '%s  %s\n' "$spec_sha256" "$RUNNER_TEMP/openapi.json" | sha256sum --check
+
+          prerelease=false
+          if [[ "$source_ref" == *-* ]]; then
+            prerelease=true
+          fi
+
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "https://registry.npmjs.org/attune-sdk/$actual")"
+          case "$status" in
+            200) published=true ;;
+            404) published=false ;;
+            *) echo "npm registry returned HTTP $status" >&2; exit 1 ;;
+          esac
+
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$actual" >> "$GITHUB_OUTPUT"
+
+      - name: Test release
+        env:
+          ATTUNE_OPENAPI_SPEC: ${{ runner.temp }}/openapi.json
+        run: |
+          npm ci
+          npm test
+          npm run lint
+          npm run test:package
+
+  publish:
+    name: Publish to npm
+    needs: prepare
+    if: needs.prepare.outputs.published != 'true'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -36,22 +117,42 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      - name: Verify release version
-        env:
-          EXPECTED_VERSION: ${{ inputs.version || github.event.release.tag_name }}
-        run: test "$(node -p "require('./package.json').version")" = "${EXPECTED_VERSION#v}"
-
       - run: npm ci
-      - run: npm test
-      - run: npm run lint
-      - run: npm run test:package
       - name: Publish package
         env:
-          PRERELEASE: ${{ inputs.prerelease || github.event.release.prerelease }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
         shell: bash
         run: |
+          set -euo pipefail
           args=(--access public)
           if [ "$PRERELEASE" = true ]; then
             args+=(--tag next)
           fi
           npm publish "${args[@]}"
+
+  release:
+    name: Record GitHub release
+    needs: [prepare, publish]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.prepare.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MERGE_SHA: ${{ needs.prepare.outputs.ref }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            exit 0
+          fi
+          args=("v$VERSION" --target "$MERGE_SHA" --title "v$VERSION" --generate-notes)
+          if [ "$PRERELEASE" = true ]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "${args[@]}"
