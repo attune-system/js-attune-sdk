@@ -19,31 +19,179 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: sync-openapi-client
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      base-sha: ${{ steps.base.outputs.sha }}
+      head-sha: ${{ steps.pull-request.outputs.pull-request-head-sha }}
+      pr-number: ${{ steps.pull-request.outputs.pull-request-number }}
+      prerelease: ${{ steps.source.outputs.prerelease }}
+      resume-ref: ${{ steps.state.outputs.ref }}
+      resume: ${{ steps.state.outputs.resume }}
+      source-ref: ${{ env.SOURCE_REF }}
+      spec-sha256: ${{ env.SPEC_SHA256 }}
+      version: ${{ steps.version.outputs.value || steps.state.outputs.version }}
     env:
       SOURCE_REF: ${{ github.event.client_payload.source_ref || inputs.source_ref }}
       SOURCE_SHA: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
       SPEC_SHA256: ${{ github.event.client_payload.spec_sha256 || inputs.spec_sha256 }}
     steps:
       - name: Validate source identity
+        id: source
         shell: bash
         run: |
           set -euo pipefail
           [[ "$SOURCE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SPEC_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "$SOURCE_REF" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Record base revision
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check synchronization state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          applied=false
+          if [ -f .attune-openapi-source.json ]; then
+            previous_sha="$(jq -r .source_sha .attune-openapi-source.json)"
+            if [ "$previous_sha" != "$SOURCE_SHA" ]; then
+              comparison="$(gh api "repos/attune-system/attune/compare/${previous_sha}...${SOURCE_SHA}" --jq .status)"
+              if [ "$comparison" != ahead ] && [ "$comparison" != identical ]; then
+                echo "Refusing OpenAPI rollback from $previous_sha to $SOURCE_SHA" >&2
+                exit 1
+              fi
+            fi
+            if [ "$(jq -r .source_ref .attune-openapi-source.json)" = "$SOURCE_REF" ] && \
+               [ "$(jq -r .source_sha .attune-openapi-source.json)" = "$SOURCE_SHA" ] && \
+               [ "$(jq -r .spec_sha256 .attune-openapi-source.json)" = "$SPEC_SHA256" ]; then
+              applied=true
+            fi
+          fi
+          resume=false
+          if [ "$applied" = true ]; then
+            version="$(jq -r .version .attune-openapi-source.json)"
+            ref="$(git log -n 1 --format=%H -- .attune-openapi-source.json)"
+            test -n "$ref"
+            echo "ref=$ref" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            if ! gh release view "v$version" >/dev/null 2>&1; then
+              resume=true
+            fi
+          fi
+          echo "applied=$applied" >> "$GITHUB_OUTPUT"
+          echo "resume=$resume" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.state.outputs.applied != 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Download OpenAPI specification
+        if: steps.state.outputs.applied != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_sha="$(git ls-remote https://github.com/attune-system/attune.git "refs/tags/$SOURCE_REF^{}" | cut -f1)"
+          if [ -z "$tag_sha" ]; then
+            tag_sha="$(git ls-remote https://github.com/attune-system/attune.git "refs/tags/$SOURCE_REF" | cut -f1)"
+          fi
+          test "$tag_sha" = "$SOURCE_SHA"
+          curl --fail --silent --show-error --location \
+            "https://github.com/attune-system/attune/releases/download/${SOURCE_REF}/attune-openapi.json" \
+            --output "$RUNNER_TEMP/openapi.json"
+          printf '%s  %s\n' "$SPEC_SHA256" "$RUNNER_TEMP/openapi.json" | sha256sum --check
+
+      - name: Regenerate and version client
+        if: steps.state.outputs.applied != 'true'
+        id: version
+        env:
+          ATTUNE_OPENAPI_SPEC: ${{ runner.temp }}/openapi.json
+        run: |
+          set -euo pipefail
+          npm ci
+          ./scripts/generate-client.sh "$ATTUNE_OPENAPI_SPEC"
+          current="$(node -p "require('./package.json').version.split('-')[0]")"
+          IFS=. read -r major minor patch <<< "$current"
+          next="$major.$minor.$((patch + 1))"
+          if [[ "$SOURCE_REF" == *-* ]]; then
+            next="$next-attune.${SOURCE_SHA:0:12}"
+          fi
+          npm version "$next" --no-git-tag-version
+          CURRENT_VERSION="$current" NEXT_VERSION="$next" SOURCE_VERSION="${SOURCE_REF#v}" node <<'NODE'
+          const { readFileSync, writeFileSync } = require("node:fs");
+
+          const readme = readFileSync("README.md", "utf8").replace(
+            /^Version \S+ is compatible with Attune \S+ and its OpenAPI \S+ contract\.$/m,
+            `Version ${process.env.NEXT_VERSION} is compatible with Attune ${process.env.SOURCE_VERSION} and its OpenAPI ${process.env.SOURCE_VERSION} contract.`,
+          );
+          writeFileSync("README.md", readme);
+          NODE
+          jq -n \
+            --arg source_ref "$SOURCE_REF" \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg spec_sha256 "$SPEC_SHA256" \
+            --arg version "$next" \
+            '{source_ref: $source_ref, source_sha: $source_sha, spec_sha256: $spec_sha256, version: $version}' \
+            > .attune-openapi-source.json
+          npm run lint
+          npm test
+          npm run build
+          npm run test:package
+          echo "value=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Create SDK update pull request
+        if: steps.state.outputs.applied != 'true'
+        id: pull-request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          branch: automation/openapi-sync
+          delete-branch: true
+          commit-message: Release SDK ${{ steps.version.outputs.value }} from Attune ${{ env.SOURCE_REF }}
+          title: Release SDK ${{ steps.version.outputs.value }} from Attune ${{ env.SOURCE_REF }}
+          body: |
+            Generated from attune-system/attune release ${{ env.SOURCE_REF }} at ${{ env.SOURCE_SHA }}.
+
+            OpenAPI SHA-256: `${{ env.SPEC_SHA256 }}`
+
+  verify:
+    needs: sync
+    if: needs.sync.outputs.pr-number != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tested pull request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.sync.outputs.head-sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -51,7 +199,10 @@ jobs:
           node-version: "24"
           cache: npm
 
-      - name: Download OpenAPI specification
+      - name: Reproduce and verify generated client
+        env:
+          SOURCE_REF: ${{ needs.sync.outputs.source-ref }}
+          SPEC_SHA256: ${{ needs.sync.outputs.spec-sha256 }}
         shell: bash
         run: |
           set -euo pipefail
@@ -59,25 +210,113 @@ jobs:
             "https://github.com/attune-system/attune/releases/download/${SOURCE_REF}/attune-openapi.json" \
             --output "$RUNNER_TEMP/openapi.json"
           printf '%s  %s\n' "$SPEC_SHA256" "$RUNNER_TEMP/openapi.json" | sha256sum --check
-
-      - name: Regenerate and test client
-        env:
-          ATTUNE_OPENAPI_SPEC: ${{ runner.temp }}/openapi.json
-        run: |
           npm ci
-          ./scripts/generate-client.sh "$ATTUNE_OPENAPI_SPEC"
+          ./scripts/generate-client.sh "$RUNNER_TEMP/openapi.json"
+          git diff --exit-code
           npm run lint
           npm test
           npm run build
+          npm run test:package
 
-      - name: Create SDK update pull request
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+  merge:
+    needs: [sync, verify]
+    if: needs.verify.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      sha: ${{ steps.merge.outputs.sha }}
+    steps:
+      - name: Merge the exact tested revision
+        id: merge
+        env:
+          BASE_SHA: ${{ needs.sync.outputs.base-sha }}
+          EXPECTED_HEAD_SHA: ${{ needs.sync.outputs.head-sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.sync.outputs.pr-number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          current_base="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$default_branch" --jq .object.sha)"
+          test "$current_base" = "$BASE_SHA"
+          test "$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)" = "$EXPECTED_HEAD_SHA"
+          gh pr merge "$PR_NUMBER" --squash --delete-branch --match-head-commit "$EXPECTED_HEAD_SHA"
+          merge_sha="$(gh pr view "$PR_NUMBER" --json mergeCommit --jq .mergeCommit.oid)"
+          test -n "$merge_sha"
+          echo "sha=$merge_sha" >> "$GITHUB_OUTPUT"
+
+  verify-release:
+    needs: [sync, merge]
+    if: always() && needs.sync.result == 'success' && (needs.merge.outputs.sha != '' || needs.sync.outputs.resume == 'true')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          branch: automation/openapi-sync
-          delete-branch: true
-          commit-message: Regenerate client from Attune OpenAPI
-          title: Regenerate client from Attune OpenAPI
-          body: |
-            Generated from attune-system/attune release ${{ env.SOURCE_REF }} at ${{ env.SOURCE_SHA }}.
+          ref: ${{ needs.merge.outputs.sha || needs.sync.outputs.resume-ref }}
 
-            OpenAPI SHA-256: `${{ env.SPEC_SHA256 }}`
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Verify release revision
+        env:
+          SOURCE_REF: ${{ needs.sync.outputs.source-ref }}
+          SPEC_SHA256: ${{ needs.sync.outputs.spec-sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            "https://github.com/attune-system/attune/releases/download/${SOURCE_REF}/attune-openapi.json" \
+            --output "$RUNNER_TEMP/openapi.json"
+          printf '%s  %s\n' "$SPEC_SHA256" "$RUNNER_TEMP/openapi.json" | sha256sum --check
+          npm ci
+          ./scripts/generate-client.sh "$RUNNER_TEMP/openapi.json"
+          git diff --exit-code
+          npm run lint
+          npm test
+          npm run build
+          npm run test:package
+
+  publish:
+    needs: [sync, merge, verify-release]
+    if: always() && needs.verify-release.result == 'success'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish.yml
+    with:
+      prerelease: ${{ needs.sync.outputs.prerelease == 'true' }}
+      ref: ${{ needs.merge.outputs.sha || needs.sync.outputs.resume-ref }}
+      version: ${{ needs.sync.outputs.version }}
+    secrets: inherit
+
+  release:
+    needs: [sync, merge, publish]
+    if: always() && needs.publish.result == 'success' && (needs.merge.outputs.sha != '' || needs.sync.outputs.resume == 'true')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Record downstream release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MERGE_SHA: ${{ needs.merge.outputs.sha || needs.sync.outputs.resume-ref }}
+          PRERELEASE: ${{ needs.sync.outputs.prerelease }}
+          VERSION: ${{ needs.sync.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=("v$VERSION" --target "$MERGE_SHA" --title "v$VERSION" --generate-notes)
+          if [ "$PRERELEASE" = true ]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "${args[@]}"

@@ -24,8 +24,11 @@ try {
     stdio: "inherit",
   });
   const packageJson = JSON.parse(readFileSync(join(tempDir, "node_modules", "attune-sdk", "package.json"), "utf8"));
-  if (packageJson.version !== "0.5.0") {
-    throw new Error(`packed SDK version is ${packageJson.version}, expected 0.5.0`);
+  const sourcePackage = JSON.parse(readFileSync("package.json", "utf8"));
+  if (packageJson.version !== sourcePackage.version) {
+    throw new Error(
+      `packed SDK version is ${packageJson.version}, expected ${sourcePackage.version}`,
+    );
   }
   const entrypoint = join(tempDir, "node_modules", "attune-sdk", packageJson.exports["."].import);
   const sdk = await import(pathToFileURL(entrypoint).href);
