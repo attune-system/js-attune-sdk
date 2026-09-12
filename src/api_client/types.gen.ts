@@ -2429,6 +2429,8 @@ export type ApplyWorkQueueItemsResponse = {
     skipped_count: number;
 };
 
+export type ArtifactBodyState = 'pending' | 'ready' | 'deleting';
+
 export type ArtifactClassification = 'general' | 'runtime_log';
 
 export type ArtifactJsonPatch = {
@@ -10713,6 +10715,7 @@ export type AllocateFileVersionByRefResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -10742,6 +10745,18 @@ export type AllocateFileVersionByRefResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -10796,6 +10811,7 @@ export type UploadVersionByRefResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -10825,6 +10841,18 @@ export type UploadVersionByRefResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11185,6 +11213,10 @@ export type DownloadLatestErrors = {
      * Artifact not found or no versions
      */
     404: unknown;
+    /**
+     * Requested range is not satisfiable
+     */
+    416: unknown;
 };
 
 export type DownloadLatestResponses = {
@@ -11192,6 +11224,10 @@ export type DownloadLatestResponses = {
      * Binary file content of latest version
      */
     200: Blob | File;
+    /**
+     * Requested byte range
+     */
+    206: Blob | File;
 };
 
 export type DownloadLatestResponse = DownloadLatestResponses[keyof DownloadLatestResponses];
@@ -11354,6 +11390,7 @@ export type ListVersionsResponses = {
      */
     200: {
         data: Array<{
+            body_state?: null | ArtifactBodyState;
             /**
              * MIME content type
              */
@@ -11378,6 +11415,9 @@ export type ListVersionsResponses = {
              * Version ID
              */
             id: number;
+            object_key?: string | null;
+            provider_version?: string | null;
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11428,6 +11468,7 @@ export type CreateVersionJsonResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -11457,6 +11498,18 @@ export type CreateVersionJsonResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11511,6 +11564,7 @@ export type CreateVersionFileResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -11540,6 +11594,18 @@ export type CreateVersionFileResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11590,6 +11656,7 @@ export type GetLatestVersionResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -11619,6 +11686,18 @@ export type GetLatestVersionResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11677,6 +11756,7 @@ export type UploadVersionResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -11706,6 +11786,18 @@ export type UploadVersionResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11792,6 +11884,7 @@ export type GetVersionResponses = {
              * Parent artifact ID
              */
             artifact: number;
+            body_state?: null | ArtifactBodyState;
             content_json?: null | Value;
             /**
              * MIME content type
@@ -11821,6 +11914,18 @@ export type GetVersionResponses = {
              */
             id: number;
             meta?: null | Value;
+            /**
+             * Immutable object-store locator.
+             */
+            object_key?: string | null;
+            /**
+             * Opaque provider generation, version ID, or ETag pinned for reads.
+             */
+            provider_version?: string | null;
+            /**
+             * SHA-256 digest of the ready body.
+             */
+            sha256?: string | null;
             /**
              * Size of content in bytes
              */
@@ -11860,6 +11965,10 @@ export type DownloadVersionErrors = {
      * Artifact, version, or content not found
      */
     404: unknown;
+    /**
+     * Requested range is not satisfiable
+     */
+    416: unknown;
 };
 
 export type DownloadVersionResponses = {
@@ -11867,6 +11976,10 @@ export type DownloadVersionResponses = {
      * Binary file content
      */
     200: Blob | File;
+    /**
+     * Requested byte range
+     */
+    206: Blob | File;
 };
 
 export type DownloadVersionResponse = DownloadVersionResponses[keyof DownloadVersionResponses];
@@ -15291,6 +15404,10 @@ export type DownloadFileErrors = {
      * File not found
      */
     404: unknown;
+    /**
+     * Requested range is not satisfiable
+     */
+    416: unknown;
 };
 
 export type DownloadFileResponses = {
@@ -15298,6 +15415,10 @@ export type DownloadFileResponses = {
      * File content
      */
     200: Blob | File;
+    /**
+     * Requested byte range
+     */
+    206: Blob | File;
 };
 
 export type DownloadFileResponse = DownloadFileResponses[keyof DownloadFileResponses];
@@ -15335,42 +15456,6 @@ export type CheckFileResponses = {
      */
     200: unknown;
 };
-
-export type AppendToFileData = {
-    body: string;
-    path: {
-        /**
-         * Relative artifact file path
-         */
-        file_path: string;
-    };
-    query?: never;
-    url: '/api/v1/internal/files/{file_path}';
-};
-
-export type AppendToFileErrors = {
-    /**
-     * Invalid file path
-     */
-    400: unknown;
-    /**
-     * Unauthorized
-     */
-    401: unknown;
-    /**
-     * Payload too large
-     */
-    413: unknown;
-};
-
-export type AppendToFileResponses = {
-    /**
-     * File content appended
-     */
-    204: void;
-};
-
-export type AppendToFileResponse = AppendToFileResponses[keyof AppendToFileResponses];
 
 export type UploadFileData = {
     body: string;
@@ -15469,6 +15554,10 @@ export type DownloadPackArchiveErrors = {
      * Pack not found
      */
     404: unknown;
+    /**
+     * Requested range is not satisfiable
+     */
+    416: unknown;
 };
 
 export type DownloadPackArchiveResponses = {
@@ -15476,6 +15565,10 @@ export type DownloadPackArchiveResponses = {
      * Pack archive
      */
     200: Blob | File;
+    /**
+     * Requested pack archive byte range
+     */
+    206: Blob | File;
 };
 
 export type DownloadPackArchiveResponse = DownloadPackArchiveResponses[keyof DownloadPackArchiveResponses];
