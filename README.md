@@ -2,7 +2,7 @@
 
 A lightweight TypeScript package providing boilerplate for writing [Attune](https://github.com/attune-system/attune) actions and sensors.
 
-Version 0.5.1 is compatible with Attune 0.5.3 and its OpenAPI 0.5.3 contract.
+Version 0.5.2 is compatible with Attune 0.6.0 and its OpenAPI 0.6.0 contract.
 
 ## Installation
 
