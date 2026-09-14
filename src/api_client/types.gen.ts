@@ -2429,7 +2429,7 @@ export type ApplyWorkQueueItemsResponse = {
     skipped_count: number;
 };
 
-export type ArtifactBodyState = 'pending' | 'ready' | 'deleting';
+export type ArtifactBodyState = 'pending' | 'ready' | 'deleting' | 'cleanup_claimed';
 
 export type ArtifactClassification = 'general' | 'runtime_log';
 
@@ -14250,6 +14250,12 @@ export type GetExecutionHistoryResponse = GetExecutionHistoryResponses[keyof Get
 
 export type StreamExecutionLogData = {
     body?: never;
+    headers?: {
+        /**
+         * Resume from this byte offset when offset is omitted
+         */
+        'Last-Event-ID'?: number | null;
+    };
     path: {
         /**
          * Execution ID
@@ -14262,7 +14268,7 @@ export type StreamExecutionLogData = {
     };
     query?: {
         /**
-         * Resume streaming from this byte offset
+         * Resume from this byte offset; takes precedence over Last-Event-ID
          */
         offset?: number;
     };
@@ -14278,6 +14284,10 @@ export type StreamExecutionLogErrors = {
      * Execution not found
      */
     404: unknown;
+    /**
+     * Execution log stream limit reached
+     */
+    429: unknown;
 };
 
 export type StreamExecutionLogResponses = {

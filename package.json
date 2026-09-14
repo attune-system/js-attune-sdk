@@ -1,6 +1,6 @@
 {
   "name": "attune-sdk",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Node.js SDK for building Attune actions and sensors",
   "license": "Apache-2.0",
   "repository": {
