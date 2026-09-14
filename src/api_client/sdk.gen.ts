@@ -933,8 +933,9 @@ export const getExecutionHistory = <ThrowOnError extends boolean = false>(option
 /**
  * Stream stdout/stderr for an execution as SSE.
  *
- * This tails the immutable segments committed by the worker. The stream may
- * not exist yet when the worker has not allocated its log artifacts.
+ * This tails the stream backend selected when the worker allocates its log
+ * artifacts. The stream may not exist yet while allocation is pending.
+ * An explicit `offset` query parameter takes precedence over `Last-Event-ID`.
  */
 export const streamExecutionLog = <ThrowOnError extends boolean = false>(options: Options<StreamExecutionLogData, ThrowOnError, unknown>) => (options.client ?? client).sse.get<StreamExecutionLogResponses, StreamExecutionLogErrors, ThrowOnError>({ url: '/api/v1/executions/{id}/logs/{stream}/stream', ...options });
 
