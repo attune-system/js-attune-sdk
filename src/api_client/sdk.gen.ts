@@ -1249,7 +1249,7 @@ export const deleteKey = <ThrowOnError extends boolean = false>(options: Options
 });
 
 /**
- * Get a single key by reference (includes decrypted value)
+ * Get a single key by reference
  */
 export const getKey = <ThrowOnError extends boolean = false>(options: Options<GetKeyData, ThrowOnError>) => (options.client ?? client).get<GetKeyResponses, GetKeyErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

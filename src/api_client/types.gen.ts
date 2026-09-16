@@ -13424,7 +13424,12 @@ export type GetEnforcementData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include decrypted secret resolved parameter values. Requires enforcements:decrypt.
+         */
+        include_secret_values?: boolean;
+    };
     url: '/api/v1/enforcements/{id}';
 };
 
@@ -13918,7 +13923,12 @@ export type GetExecutionData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include decrypted secret parameter/result values. Requires executions:decrypt.
+         */
+        include_secret_values?: boolean;
+    };
     url: '/api/v1/executions/{id}';
 };
 
