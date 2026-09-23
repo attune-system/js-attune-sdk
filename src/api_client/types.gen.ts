@@ -4,6 +4,11 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:8080' | 'https://api.attune.example.com' | (string & {});
 };
 
+/**
+ * How an installation handles pack-managed metadata omitted by the new release.
+ */
+export type AbsentMetadataPolicy = 'remove' | 'disable' | 'retain';
+
 export type ActionReferenceVisibility = 'public' | 'private' | 'restricted';
 
 /**
@@ -94,6 +99,7 @@ export type ActionResponse = {
     required_worker_runtimes?: {
         [key: string]: unknown;
     };
+    retired_at?: string | null;
     /**
      * Runtime ID
      */
@@ -242,6 +248,7 @@ export type ActionSummary = {
     required_worker_runtimes?: {
         [key: string]: unknown;
     };
+    retired_at?: string | null;
     /**
      * Runtime ID
      */
@@ -479,6 +486,7 @@ export type ApiResponseActionResponse = {
         required_worker_runtimes?: {
             [key: string]: unknown;
         };
+        retired_at?: string | null;
         /**
          * Runtime ID
          */
@@ -748,6 +756,23 @@ export type ApiResponseBulkEnqueueWorkQueueItemsResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseCreateInquiryResponse = {
+    /**
+     * Creation result containing the inquiry and one opaque handle per response option.
+     */
+    data: {
+        inquiry: InquiryResponse;
+        response_options: Array<InquiryResponseOptionHandle>;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseCurrentUserResponse = {
     /**
      * Current user response
@@ -808,6 +833,7 @@ export type ApiResponseDashboardMetadataResponse = {
         owner_identity?: number | null;
         pack?: number | null;
         ref: string;
+        retired_at?: string | null;
         revision: number;
         scope_ref: string;
         scope_type: DashboardScopeType;
@@ -1115,6 +1141,28 @@ export type ApiResponseExecutionResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseExternalIdentityMappingResponse = {
+    data: {
+        created: string;
+        created_by?: number | null;
+        external_subject: string;
+        id: number;
+        integration_identity: number;
+        mapped_identity: number;
+        provider: string;
+        subject_kind: string;
+        tenant: string;
+        updated: string;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseGetPackDependenciesResponse = {
     /**
      * Response DTO for get pack dependencies operation
@@ -1177,14 +1225,18 @@ export type ApiResponseInquiryResponse = {
      */
     data: {
         assigned_to?: null | I64;
+        assigned_to_display_name?: string | null;
+        assigned_to_login?: string | null;
         /**
          * Creation timestamp
          */
         created: string;
+        created_by_action_ref?: string | null;
         /**
-         * Execution ID this inquiry belongs to
+         * Execution ID that created this inquiry
          */
-        execution: I64;
+        created_by_execution: I64;
+        created_by_pack_ref?: string | null;
         /**
          * Inquiry ID
          */
@@ -1193,10 +1245,14 @@ export type ApiResponseInquiryResponse = {
          * Prompt text displayed to the user
          */
         prompt: string;
+        purpose?: string | null;
         /**
          * When the inquiry was responded to
          */
         responded_at?: string | null;
+        responded_by?: null | I64;
+        responded_by_display_name?: string | null;
+        responded_by_login?: string | null;
         /**
          * Response data provided by the user
          */
@@ -1204,7 +1260,11 @@ export type ApiResponseInquiryResponse = {
             [key: string]: unknown;
         } | null;
         /**
-         * JSON schema for expected response
+         * Fixed responses that provider controls may select.
+         */
+        response_options: Array<InquiryResponseOption>;
+        /**
+         * Attune flat schema for expected response fields
          */
         response_schema: {
             [key: string]: unknown;
@@ -1221,6 +1281,11 @@ export type ApiResponseInquiryResponse = {
          * Last update timestamp
          */
         updated: string;
+        workflow_action_ref?: string | null;
+        workflow_execution?: null | I64;
+        workflow_pack_ref?: string | null;
+        workflow_root_execution?: null | I64;
+        workflow_task_name?: string | null;
     };
     /**
      * Optional message
@@ -1340,6 +1405,10 @@ export type ApiResponsePackInstallStatusResponse = {
      * Response describing a tracked pack installation attempt.
      */
     data: {
+        /**
+         * Policy applied to metadata omitted by this release.
+         */
+        absent_metadata_policy: AbsentMetadataPolicy;
         /**
          * Failure detail, when the install failed
          */
@@ -1503,6 +1572,23 @@ export type ApiResponsePermissionAssignmentResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponsePlatformCatalogStateResponse = {
+    data: {
+        compatibility_epoch: number;
+        expected_compatibility_epoch: number;
+        expected_revision: number;
+        revision: number;
+        status: PlatformCatalogStatus;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponsePolicyResponse = {
     data: {
         concurrency?: null | ConcurrencyPolicyResponse;
@@ -1515,6 +1601,7 @@ export type ApiResponsePolicyResponse = {
         quotas: Array<QuotaPolicyResponse>;
         rate_limit?: null | RateLimitPolicyResponse;
         ref: string;
+        retired_at?: string | null;
         scope: PolicyScopeResponse;
         tags: Array<string>;
         updated: string;
@@ -1735,6 +1822,7 @@ export type ApiResponseRuleResponse = {
          * Unique reference identifier
          */
         ref: string;
+        retired_at?: string | null;
         sensor_worker_affinity: {
             [key: string]: unknown;
         };
@@ -1797,6 +1885,7 @@ export type ApiResponseRuntimeResponse = {
         pack?: number | null;
         pack_ref?: string | null;
         ref: string;
+        retired_at?: string | null;
         updated: string;
     };
     /**
@@ -1865,6 +1954,7 @@ export type ApiResponseSensorResponse = {
          * Unique reference identifier
          */
         ref: string;
+        retired_at?: string | null;
         /**
          * Runtime ID
          */
@@ -2047,6 +2137,7 @@ export type ApiResponseTriggerResponse = {
          * Pack-level visibility for rule subscriptions.
          */
         reference_visibility: ActionReferenceVisibility;
+        retired_at?: string | null;
         /**
          * Sensor ID (optional — webhook triggers have no sensor)
          */
@@ -2171,12 +2262,49 @@ export type ApiResponseVecDashboardListItemResponse = {
         is_default_home: boolean;
         label: string;
         ref: string;
+        retired_at?: string | null;
         revision: number;
         scope_ref: string;
         scope_type: DashboardScopeType;
         tags: Array<string>;
         updated: string;
         visibility: DashboardVisibility;
+    }>;
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseVecPackReleaseResponse = {
+    data: Array<{
+        archive_size: number;
+        created: string;
+        digest: string;
+        id: number;
+        inactive_since?: string | null;
+        is_active: boolean;
+        version: string;
+    }>;
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseVecRetiredPackComponentResponse = {
+    data: Array<{
+        component_ref?: string | null;
+        id: number;
+        kind: string;
+        managed_release?: number | null;
+        retired_at: string;
     }>;
     /**
      * Optional message
@@ -2202,6 +2330,27 @@ export type ApiResponseVecWorkflowCacheIterationResponse = {
         state: WorkflowCacheIterationState;
         task_name: string;
         updated: string;
+    }>;
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseVecWorkflowTaskWaitResponse = {
+    data: Array<{
+        created: string;
+        id: number;
+        kind: WorkflowTaskWaitKind;
+        resolved_at?: string | null;
+        state: WorkflowTaskWaitState;
+        target_id?: number | null;
+        task_name: string;
+        updated: string;
+        work_queue_ref?: string | null;
     }>;
     /**
      * Optional message
@@ -2314,6 +2463,7 @@ export type ApiResponseWorkQueueResponse = {
         reference_allowed_pack_refs: Array<string>;
         reference_visibility: ActionReferenceVisibility;
         resolved_dispatch_tuning?: null | ResolvedWorkQueueDispatchTuningResponse;
+        retired_at?: string | null;
         trace_tag_template?: string | null;
         update_strategy: WorkQueueUpdateStrategy;
         updated: string;
@@ -2378,6 +2528,7 @@ export type ApiResponseWorkflowResponse = {
          * Unique reference identifier
          */
         ref: string;
+        retired_at?: string | null;
         /**
          * Tags
          */
@@ -2993,6 +3144,7 @@ export type CacheNamespaceResponse = {
      * Active generation record count, when populated.
      */
     record_count: number | null;
+    retired_at: string | null;
     /**
      * Active generation size in bytes, when populated.
      */
@@ -3513,6 +3665,14 @@ export type CreateExecutionRequest = {
     }> | null;
 };
 
+export type CreateExternalIdentityMappingRequest = {
+    external_subject: string;
+    mapped_identity: number;
+    provider: string;
+    subject_kind: string;
+    tenant: string;
+};
+
 /**
  * Request DTO for creating a new file-backed artifact version.
  * No file content is included — the caller writes the file directly to
@@ -3556,23 +3716,35 @@ export type CreateIdentityRoleAssignmentRequest = {
 export type CreateInquiryRequest = {
     assigned_to?: null | I64;
     /**
-     * Execution ID this inquiry belongs to
-     */
-    execution: I64;
-    /**
      * Prompt text to display to the user
      */
     prompt: string;
     /**
+     * Stable purpose used to make creation idempotent within this workflow task attempt.
+     */
+    purpose: string;
+    /**
+     * Fixed response choices rendered by provider actions.
+     */
+    response_options: Array<InquiryResponseOption>;
+    /**
      * Optional schema for the expected response format (flat format with inline required/secret)
      */
-    response_schema: {
+    response_schema?: {
         [key: string]: unknown;
-    };
+    } | null;
     /**
-     * Optional timeout timestamp (when inquiry expires)
+     * Optional relative timeout in seconds.
      */
-    timeout_at?: string | null;
+    timeout_seconds?: number | null;
+};
+
+/**
+ * Creation result containing the inquiry and one opaque handle per response option.
+ */
+export type CreateInquiryResponse = {
+    inquiry: InquiryResponse;
+    response_options: Array<InquiryResponseOptionHandle>;
 };
 
 export type CreateIntegrationTokenRequest = {
@@ -4178,6 +4350,7 @@ export type DashboardListItemResponse = {
     is_default_home: boolean;
     label: string;
     ref: string;
+    retired_at?: string | null;
     revision: number;
     scope_ref: string;
     scope_type: DashboardScopeType;
@@ -4197,6 +4370,7 @@ export type DashboardMetadataResponse = {
     owner_identity?: number | null;
     pack?: number | null;
     ref: string;
+    retired_at?: string | null;
     revision: number;
     scope_ref: string;
     scope_type: DashboardScopeType;
@@ -4807,6 +4981,19 @@ export type ExecutionSummary = {
     } | null;
 };
 
+export type ExternalIdentityMappingResponse = {
+    created: string;
+    created_by?: number | null;
+    external_subject: string;
+    id: number;
+    integration_identity: number;
+    mapped_identity: number;
+    provider: string;
+    subject_kind: string;
+    tenant: string;
+    updated: string;
+};
+
 /**
  * Failed environment build
  */
@@ -5045,14 +5232,18 @@ export type InquiryRespondRequest = {
  */
 export type InquiryResponse = {
     assigned_to?: null | I64;
+    assigned_to_display_name?: string | null;
+    assigned_to_login?: string | null;
     /**
      * Creation timestamp
      */
     created: string;
+    created_by_action_ref?: string | null;
     /**
-     * Execution ID this inquiry belongs to
+     * Execution ID that created this inquiry
      */
-    execution: I64;
+    created_by_execution: I64;
+    created_by_pack_ref?: string | null;
     /**
      * Inquiry ID
      */
@@ -5061,10 +5252,14 @@ export type InquiryResponse = {
      * Prompt text displayed to the user
      */
     prompt: string;
+    purpose?: string | null;
     /**
      * When the inquiry was responded to
      */
     responded_at?: string | null;
+    responded_by?: null | I64;
+    responded_by_display_name?: string | null;
+    responded_by_login?: string | null;
     /**
      * Response data provided by the user
      */
@@ -5072,7 +5267,11 @@ export type InquiryResponse = {
         [key: string]: unknown;
     } | null;
     /**
-     * JSON schema for expected response
+     * Fixed responses that provider controls may select.
+     */
+    response_options: Array<InquiryResponseOption>;
+    /**
+     * Attune flat schema for expected response fields
      */
     response_schema: {
         [key: string]: unknown;
@@ -5089,7 +5288,33 @@ export type InquiryResponse = {
      * Last update timestamp
      */
     updated: string;
+    workflow_action_ref?: string | null;
+    workflow_execution?: null | I64;
+    workflow_pack_ref?: string | null;
+    workflow_root_execution?: null | I64;
+    workflow_task_name?: string | null;
 };
+
+export type InquiryResponseOption = {
+    label: string;
+    ref: string;
+    response: {
+        [key: string]: unknown;
+    };
+    style: InquiryResponseOptionStyle;
+};
+
+/**
+ * Provider rendering metadata for one fixed response option.
+ */
+export type InquiryResponseOptionHandle = {
+    label: string;
+    ref: string;
+    response_handle: string;
+    style: InquiryResponseOptionStyle;
+};
+
+export type InquiryResponseOptionStyle = 'default' | 'positive' | 'destructive';
 
 export type InquiryStatus = 'pending' | 'responded' | 'timeout' | 'cancelled';
 
@@ -5098,14 +5323,18 @@ export type InquiryStatus = 'pending' | 'responded' | 'timeout' | 'cancelled';
  */
 export type InquirySummary = {
     assigned_to?: null | I64;
+    assigned_to_display_name?: string | null;
+    assigned_to_login?: string | null;
     /**
      * Creation timestamp
      */
     created: string;
+    created_by_action_ref?: string | null;
     /**
-     * Execution ID
+     * Execution ID that created this inquiry
      */
-    execution: I64;
+    created_by_execution: I64;
+    created_by_pack_ref?: string | null;
     /**
      * Whether a response has been provided
      */
@@ -5126,12 +5355,21 @@ export type InquirySummary = {
      * Timeout timestamp
      */
     timeout_at?: string | null;
+    workflow_action_ref?: string | null;
+    workflow_execution?: null | I64;
+    workflow_pack_ref?: string | null;
+    workflow_root_execution?: null | I64;
+    workflow_task_name?: string | null;
 };
 
 /**
  * Request DTO for installing a pack from remote source
  */
 export type InstallPackRequest = {
+    /**
+     * How to handle pack-managed metadata omitted by this release.
+     */
+    absent_metadata_policy?: AbsentMetadataPolicy;
     /**
      * Replace an existing pack with the same ref
      */
@@ -5667,6 +5905,10 @@ export type PackInstallResponse = {
  */
 export type PackInstallStatusResponse = {
     /**
+     * Policy applied to metadata omitted by this release.
+     */
+    absent_metadata_policy: AbsentMetadataPolicy;
+    /**
      * Failure detail, when the install failed
      */
     error_message?: string | null;
@@ -5733,6 +5975,19 @@ export type PackRegistryIndexSummary = {
     name?: string | null;
     position: number;
     url: string;
+};
+
+/**
+ * Public metadata for an immutable pack release.
+ */
+export type PackReleaseResponse = {
+    archive_size: number;
+    created: string;
+    digest: string;
+    id: number;
+    inactive_since?: string | null;
+    is_active: boolean;
+    version: string;
 };
 
 /**
@@ -5920,6 +6175,7 @@ export type PackTestSummary = {
 };
 
 export type PackUploadForm = {
+    absent_metadata_policy?: string | null;
     force?: string | null;
     pack: Blob | File;
     skip_tests?: string | null;
@@ -6094,6 +6350,7 @@ export type PaginatedResponseActionSummary = {
         required_worker_runtimes?: {
             [key: string]: unknown;
         };
+        retired_at?: string | null;
         /**
          * Runtime ID
          */
@@ -6398,6 +6655,31 @@ export type PaginatedResponseExecutionSummary = {
 /**
  * Paginated response wrapper
  */
+export type PaginatedResponseExternalIdentityMappingResponse = {
+    /**
+     * The page items
+     */
+    items: Array<{
+        created: string;
+        created_by?: number | null;
+        external_subject: string;
+        id: number;
+        integration_identity: number;
+        mapped_identity: number;
+        provider: string;
+        subject_kind: string;
+        tenant: string;
+        updated: string;
+    }>;
+    /**
+     * Pagination metadata
+     */
+    pagination: PaginationMeta;
+};
+
+/**
+ * Paginated response wrapper
+ */
 export type PaginatedResponseHistoryRecordResponse = {
     /**
      * The page items
@@ -6472,14 +6754,18 @@ export type PaginatedResponseInquirySummary = {
      */
     items: Array<{
         assigned_to?: null | I64;
+        assigned_to_display_name?: string | null;
+        assigned_to_login?: string | null;
         /**
          * Creation timestamp
          */
         created: string;
+        created_by_action_ref?: string | null;
         /**
-         * Execution ID
+         * Execution ID that created this inquiry
          */
-        execution: I64;
+        created_by_execution: I64;
+        created_by_pack_ref?: string | null;
         /**
          * Whether a response has been provided
          */
@@ -6500,6 +6786,11 @@ export type PaginatedResponseInquirySummary = {
          * Timeout timestamp
          */
         timeout_at?: string | null;
+        workflow_action_ref?: string | null;
+        workflow_execution?: null | I64;
+        workflow_pack_ref?: string | null;
+        workflow_root_execution?: null | I64;
+        workflow_task_name?: string | null;
     }>;
     /**
      * Pagination metadata
@@ -6651,6 +6942,7 @@ export type PaginatedResponsePolicySummary = {
         quotas: Array<QuotaPolicyResponse>;
         rate_limit?: null | RateLimitPolicyResponse;
         ref: string;
+        retired_at?: string | null;
         scope: PolicyScopeResponse;
         tags: Array<string>;
         updated: string;
@@ -6712,6 +7004,7 @@ export type PaginatedResponseRuleSummary = {
          * Unique reference identifier
          */
         ref: string;
+        retired_at?: string | null;
         sensor_worker_affinity: {
             [key: string]: unknown;
         };
@@ -6760,6 +7053,7 @@ export type PaginatedResponseRuntimeSummary = {
         name: string;
         pack_ref?: string | null;
         ref: string;
+        retired_at?: string | null;
         updated: string;
     }>;
     /**
@@ -6814,6 +7108,7 @@ export type PaginatedResponseSensorSummary = {
          * Unique reference identifier
          */
         ref: string;
+        retired_at?: string | null;
         /**
          * Last update timestamp
          */
@@ -6869,6 +7164,7 @@ export type PaginatedResponseTriggerSummary = {
          * Pack-level visibility for rule subscriptions.
          */
         reference_visibility: ActionReferenceVisibility;
+        retired_at?: string | null;
         /**
          * Last update timestamp
          */
@@ -6948,6 +7244,7 @@ export type PaginatedResponseWorkQueueSummary = {
         ref: string;
         reference_allowed_pack_refs: Array<string>;
         reference_visibility: ActionReferenceVisibility;
+        retired_at?: string | null;
         trace_tag_template?: string | null;
         updated: string;
     }>;
@@ -7023,6 +7320,7 @@ export type PaginatedResponseWorkflowSummary = {
          * Unique reference identifier
          */
         ref: string;
+        retired_at?: string | null;
         /**
          * Tags
          */
@@ -7095,8 +7393,22 @@ export type PermissionSetSummary = {
     label?: string | null;
     pack_ref?: string | null;
     ref: string;
+    retired_at?: string | null;
     roles: Array<PermissionSetRoleAssignmentResponse>;
 };
+
+export type PlatformCatalogStateResponse = {
+    compatibility_epoch: number;
+    expected_compatibility_epoch: number;
+    expected_revision: number;
+    revision: number;
+    status: PlatformCatalogStatus;
+};
+
+/**
+ * Compatibility between the database catalog and this API build.
+ */
+export type PlatformCatalogStatus = 'current' | 'upgrade_required' | 'incompatible';
 
 export type PolicyMethod = 'cancel' | 'enqueue';
 
@@ -7111,6 +7423,7 @@ export type PolicyResponse = {
     quotas: Array<QuotaPolicyResponse>;
     rate_limit?: null | RateLimitPolicyResponse;
     ref: string;
+    retired_at?: string | null;
     scope: PolicyScopeResponse;
     tags: Array<string>;
     updated: string;
@@ -7143,6 +7456,7 @@ export type PolicySummary = {
     quotas: Array<QuotaPolicyResponse>;
     rate_limit?: null | RateLimitPolicyResponse;
     ref: string;
+    retired_at?: string | null;
     scope: PolicyScopeResponse;
     tags: Array<string>;
     updated: string;
@@ -7333,6 +7647,10 @@ export type RefreshTokenRequest = {
  */
 export type RegisterPackRequest = {
     /**
+     * How to handle pack-managed metadata omitted by this release.
+     */
+    absent_metadata_policy?: AbsentMetadataPolicy;
+    /**
      * Force registration even if tests fail
      */
     force?: boolean;
@@ -7350,6 +7668,10 @@ export type RegisterPackRequest = {
  * Request DTO for registering multiple packs
  */
 export type RegisterPacksRequest = {
+    /**
+     * How to handle pack-managed metadata omitted by each release.
+     */
+    absent_metadata_policy?: AbsentMetadataPolicy;
     /**
      * Force registration (replace if exists)
      */
@@ -7551,6 +7873,17 @@ export type RetentionTargetsConfig = {
     workers?: RetentionTargetConfig;
 };
 
+/**
+ * A component removed from the active projection of an installed pack.
+ */
+export type RetiredPackComponentResponse = {
+    component_ref?: string | null;
+    id: number;
+    kind: string;
+    managed_release?: number | null;
+    retired_at: string;
+};
+
 export type RevokeIntegrationTokenRequest = {
     reason?: string | null;
 };
@@ -7624,6 +7957,7 @@ export type RuleResponse = {
      * Unique reference identifier
      */
     ref: string;
+    retired_at?: string | null;
     sensor_worker_affinity: {
         [key: string]: unknown;
     };
@@ -7704,6 +8038,7 @@ export type RuleSummary = {
      * Unique reference identifier
      */
     ref: string;
+    retired_at?: string | null;
     sensor_worker_affinity: {
         [key: string]: unknown;
     };
@@ -7765,6 +8100,7 @@ export type RuntimeResponse = {
     pack?: number | null;
     pack_ref?: string | null;
     ref: string;
+    retired_at?: string | null;
     updated: string;
 };
 
@@ -7778,6 +8114,7 @@ export type RuntimeSummary = {
     name: string;
     pack_ref?: string | null;
     ref: string;
+    retired_at?: string | null;
     updated: string;
 };
 
@@ -7915,6 +8252,7 @@ export type SensorResponse = {
      * Unique reference identifier
      */
     ref: string;
+    retired_at?: string | null;
     /**
      * Runtime ID
      */
@@ -7985,6 +8323,7 @@ export type SensorSummary = {
      * Unique reference identifier
      */
     ref: string;
+    retired_at?: string | null;
     /**
      * Last update timestamp
      */
@@ -8232,6 +8571,7 @@ export type TriggerResponse = {
      * Pack-level visibility for rule subscriptions.
      */
     reference_visibility: ActionReferenceVisibility;
+    retired_at?: string | null;
     /**
      * Sensor ID (optional — webhook triggers have no sensor)
      */
@@ -8301,6 +8641,7 @@ export type TriggerSummary = {
      * Pack-level visibility for rule subscriptions.
      */
     reference_visibility: ActionReferenceVisibility;
+    retired_at?: string | null;
     /**
      * Last update timestamp
      */
@@ -8446,25 +8787,19 @@ export type UpdateDashboardRequest = {
     visibility?: null | DashboardVisibility;
 };
 
+export type UpdateExternalIdentityMappingRequest = {
+    external_subject: string;
+    mapped_identity: number;
+    provider: string;
+    subject_kind: string;
+    tenant: string;
+};
+
 export type UpdateIdentityRequest = {
     attributes?: null | Value;
     display_name?: string | null;
     frozen?: boolean | null;
     password?: string | null;
-};
-
-/**
- * Request to update an inquiry
- */
-export type UpdateInquiryRequest = {
-    assigned_to?: null | I64;
-    /**
-     * Update the response data
-     */
-    response: {
-        [key: string]: unknown;
-    } | null;
-    status?: null | InquiryStatus;
 };
 
 /**
@@ -8988,6 +9323,7 @@ export type WorkQueueResponse = {
     reference_allowed_pack_refs: Array<string>;
     reference_visibility: ActionReferenceVisibility;
     resolved_dispatch_tuning?: null | ResolvedWorkQueueDispatchTuningResponse;
+    retired_at?: string | null;
     trace_tag_template?: string | null;
     update_strategy: WorkQueueUpdateStrategy;
     updated: string;
@@ -9006,6 +9342,7 @@ export type WorkQueueSummary = {
     ref: string;
     reference_allowed_pack_refs: Array<string>;
     reference_visibility: ActionReferenceVisibility;
+    retired_at?: string | null;
     trace_tag_template?: string | null;
     updated: string;
 };
@@ -9141,6 +9478,7 @@ export type WorkflowResponse = {
      * Unique reference identifier
      */
     ref: string;
+    retired_at?: string | null;
     /**
      * Tags
      */
@@ -9183,6 +9521,7 @@ export type WorkflowSummary = {
      * Unique reference identifier
      */
     ref: string;
+    retired_at?: string | null;
     /**
      * Tags
      */
@@ -9218,6 +9557,10 @@ export type WorkflowSyncResult = {
      */
     workflow_def_id: number;
 };
+
+export type WorkflowTaskWaitKind = 'inquiry' | 'execution' | 'work_queue_item';
+
+export type WorkflowTaskWaitState = 'waiting' | 'failed' | 'timed_out' | 'cancelled' | 'released';
 
 export type I64 = number;
 
@@ -9375,6 +9718,7 @@ export type CreateActionResponses = {
             required_worker_runtimes?: {
                 [key: string]: unknown;
             };
+            retired_at?: string | null;
             /**
              * Runtime ID
              */
@@ -9681,6 +10025,7 @@ export type GetActionResponses = {
             required_worker_runtimes?: {
                 [key: string]: unknown;
             };
+            retired_at?: string | null;
             /**
              * Runtime ID
              */
@@ -9845,6 +10190,7 @@ export type UpdateActionResponses = {
             required_worker_runtimes?: {
                 [key: string]: unknown;
             };
+            retired_at?: string | null;
             /**
              * Runtime ID
              */
@@ -13908,7 +14254,7 @@ export type ListInquiriesByExecutionErrors = {
 
 export type ListInquiriesByExecutionResponses = {
     /**
-     * List of inquiries for execution
+     * List of inquiries created by execution
      */
     200: PaginatedResponseInquirySummary;
 };
@@ -14420,6 +14766,58 @@ export type ListWorkflowCacheIterationsResponses = {
 };
 
 export type ListWorkflowCacheIterationsResponse = ListWorkflowCacheIterationsResponses[keyof ListWorkflowCacheIterationsResponses];
+
+export type ListWorkflowTaskWaitsData = {
+    body?: never;
+    path: {
+        /**
+         * Execution ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/v1/executions/{id}/workflow-task-waits';
+};
+
+export type ListWorkflowTaskWaitsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Execution is not visible to the caller
+     */
+    403: unknown;
+    /**
+     * Execution not found
+     */
+    404: unknown;
+};
+
+export type ListWorkflowTaskWaitsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            created: string;
+            id: number;
+            kind: WorkflowTaskWaitKind;
+            resolved_at?: string | null;
+            state: WorkflowTaskWaitState;
+            target_id?: number | null;
+            task_name: string;
+            updated: string;
+            work_queue_ref?: string | null;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type ListWorkflowTaskWaitsResponse = ListWorkflowTaskWaitsResponses[keyof ListWorkflowTaskWaitsResponses];
 
 export type ListEntityHistoryData = {
     body?: never;
@@ -15079,6 +15477,223 @@ export type UnfreezeIdentityResponses = {
 
 export type UnfreezeIdentityResponse = UnfreezeIdentityResponses[keyof UnfreezeIdentityResponses];
 
+export type ListExternalIdentityMappingsData = {
+    body?: never;
+    path: {
+        /**
+         * Integration identity ID
+         */
+        integration_identity: number;
+    };
+    query?: {
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+    };
+    url: '/api/v1/identities/{integration_identity}/external-identity-mappings';
+};
+
+export type ListExternalIdentityMappingsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Insufficient identity read permission
+     */
+    403: unknown;
+    /**
+     * Integration identity not found
+     */
+    404: unknown;
+};
+
+export type ListExternalIdentityMappingsResponses = {
+    /**
+     * Mappings
+     */
+    200: PaginatedResponseExternalIdentityMappingResponse;
+};
+
+export type ListExternalIdentityMappingsResponse = ListExternalIdentityMappingsResponses[keyof ListExternalIdentityMappingsResponses];
+
+export type CreateExternalIdentityMappingData = {
+    body: CreateExternalIdentityMappingRequest;
+    path: {
+        /**
+         * Integration identity ID
+         */
+        integration_identity: number;
+    };
+    query?: never;
+    url: '/api/v1/identities/{integration_identity}/external-identity-mappings';
+};
+
+export type CreateExternalIdentityMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Insufficient identity administration permission
+     */
+    403: unknown;
+    /**
+     * Integration identity not found
+     */
+    404: unknown;
+    /**
+     * Mapping already exists
+     */
+    409: unknown;
+    /**
+     * Invalid mapping
+     */
+    422: unknown;
+};
+
+export type CreateExternalIdentityMappingResponses = {
+    /**
+     * Mapping created
+     */
+    201: ApiResponseExternalIdentityMappingResponse;
+};
+
+export type CreateExternalIdentityMappingResponse = CreateExternalIdentityMappingResponses[keyof CreateExternalIdentityMappingResponses];
+
+export type DeleteExternalIdentityMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Integration identity ID
+         */
+        integration_identity: number;
+        /**
+         * Mapping ID
+         */
+        mapping_id: number;
+    };
+    query?: never;
+    url: '/api/v1/identities/{integration_identity}/external-identity-mappings/{mapping_id}';
+};
+
+export type DeleteExternalIdentityMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Insufficient identity administration permission
+     */
+    403: unknown;
+    /**
+     * Identity or mapping not found
+     */
+    404: unknown;
+};
+
+export type DeleteExternalIdentityMappingResponses = {
+    /**
+     * Mapping deleted
+     */
+    200: ApiResponseSuccessResponse;
+};
+
+export type DeleteExternalIdentityMappingResponse = DeleteExternalIdentityMappingResponses[keyof DeleteExternalIdentityMappingResponses];
+
+export type GetExternalIdentityMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Integration identity ID
+         */
+        integration_identity: number;
+        /**
+         * Mapping ID
+         */
+        mapping_id: number;
+    };
+    query?: never;
+    url: '/api/v1/identities/{integration_identity}/external-identity-mappings/{mapping_id}';
+};
+
+export type GetExternalIdentityMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Insufficient identity read permission
+     */
+    403: unknown;
+    /**
+     * Identity or mapping not found
+     */
+    404: unknown;
+};
+
+export type GetExternalIdentityMappingResponses = {
+    /**
+     * Mapping
+     */
+    200: ApiResponseExternalIdentityMappingResponse;
+};
+
+export type GetExternalIdentityMappingResponse = GetExternalIdentityMappingResponses[keyof GetExternalIdentityMappingResponses];
+
+export type UpdateExternalIdentityMappingData = {
+    body: UpdateExternalIdentityMappingRequest;
+    path: {
+        /**
+         * Integration identity ID
+         */
+        integration_identity: number;
+        /**
+         * Mapping ID
+         */
+        mapping_id: number;
+    };
+    query?: never;
+    url: '/api/v1/identities/{integration_identity}/external-identity-mappings/{mapping_id}';
+};
+
+export type UpdateExternalIdentityMappingErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Insufficient identity administration permission
+     */
+    403: unknown;
+    /**
+     * Identity or mapping not found
+     */
+    404: unknown;
+    /**
+     * Mapping already exists
+     */
+    409: unknown;
+    /**
+     * Invalid mapping
+     */
+    422: unknown;
+};
+
+export type UpdateExternalIdentityMappingResponses = {
+    /**
+     * Mapping updated
+     */
+    200: ApiResponseExternalIdentityMappingResponse;
+};
+
+export type UpdateExternalIdentityMappingResponse = UpdateExternalIdentityMappingResponses[keyof UpdateExternalIdentityMappingResponses];
+
 export type ListInquiriesData = {
     body?: never;
     path?: never;
@@ -15088,13 +15703,21 @@ export type ListInquiriesData = {
          */
         status?: null | InquiryStatus;
         /**
-         * Filter by execution ID
+         * Filter by creator execution ID
          */
-        execution?: null | I64;
+        created_by_execution?: null | I64;
         /**
          * Filter by assigned identity
          */
         assigned_to?: null | I64;
+        /**
+         * Filter by the containing workflow action reference
+         */
+        workflow_action_ref?: string | null;
+        /**
+         * Filter by the containing workflow pack reference
+         */
+        workflow_pack_ref?: string | null;
         /**
          * Pagination offset
          */
@@ -15136,7 +15759,7 @@ export type CreateInquiryData = {
 
 export type CreateInquiryErrors = {
     /**
-     * Invalid request
+     * Malformed request
      */
     400: unknown;
     /**
@@ -15144,9 +15767,21 @@ export type CreateInquiryErrors = {
      */
     401: unknown;
     /**
+     * Execution token or inquiries:create permission required
+     */
+    403: unknown;
+    /**
      * Execution not found
      */
     404: unknown;
+    /**
+     * Idempotent creation fields differ
+     */
+    409: unknown;
+    /**
+     * Inquiry request, schema, or options are invalid
+     */
+    422: unknown;
     /**
      * Internal server error
      */
@@ -15155,18 +15790,18 @@ export type CreateInquiryErrors = {
 
 export type CreateInquiryResponses = {
     /**
-     * Inquiry created successfully
+     * Inquiry and one-shot response handle created
      */
-    201: ApiResponseInquiryResponse;
+    201: ApiResponseCreateInquiryResponse;
 };
 
-export type CreateInquiryResponse = CreateInquiryResponses[keyof CreateInquiryResponses];
+export type CreateInquiryResponse2 = CreateInquiryResponses[keyof CreateInquiryResponses];
 
 export type ListInquiriesByStatusData = {
     body?: never;
     path: {
         /**
-         * Inquiry status (pending, responded, timeout, canceled)
+         * Inquiry status (pending, responded, timeout, cancelled)
          */
         status: string;
     };
@@ -15207,42 +15842,6 @@ export type ListInquiriesByStatusResponses = {
 
 export type ListInquiriesByStatusResponse = ListInquiriesByStatusResponses[keyof ListInquiriesByStatusResponses];
 
-export type DeleteInquiryData = {
-    body?: never;
-    path: {
-        /**
-         * Inquiry ID
-         */
-        id: number;
-    };
-    query?: never;
-    url: '/api/v1/inquiries/{id}';
-};
-
-export type DeleteInquiryErrors = {
-    /**
-     * Unauthorized
-     */
-    401: unknown;
-    /**
-     * Inquiry not found
-     */
-    404: unknown;
-    /**
-     * Internal server error
-     */
-    500: unknown;
-};
-
-export type DeleteInquiryResponses = {
-    /**
-     * Inquiry deleted successfully
-     */
-    200: SuccessResponse;
-};
-
-export type DeleteInquiryResponse = DeleteInquiryResponses[keyof DeleteInquiryResponses];
-
 export type GetInquiryData = {
     body?: never;
     path: {
@@ -15279,8 +15878,8 @@ export type GetInquiryResponses = {
 
 export type GetInquiryResponse = GetInquiryResponses[keyof GetInquiryResponses];
 
-export type UpdateInquiryData = {
-    body: UpdateInquiryRequest;
+export type CancelInquiryData = {
+    body?: never;
     path: {
         /**
          * Inquiry ID
@@ -15288,36 +15887,40 @@ export type UpdateInquiryData = {
         id: number;
     };
     query?: never;
-    url: '/api/v1/inquiries/{id}';
+    url: '/api/v1/inquiries/{id}/cancel';
 };
 
-export type UpdateInquiryErrors = {
-    /**
-     * Invalid request
-     */
-    400: unknown;
+export type CancelInquiryErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
     /**
+     * Only the creator execution can cancel the inquiry
+     */
+    403: unknown;
+    /**
      * Inquiry not found
      */
     404: unknown;
+    /**
+     * Inquiry is no longer pending
+     */
+    409: unknown;
     /**
      * Internal server error
      */
     500: unknown;
 };
 
-export type UpdateInquiryResponses = {
+export type CancelInquiryResponses = {
     /**
-     * Inquiry updated successfully
+     * Inquiry cancelled
      */
     200: ApiResponseInquiryResponse;
 };
 
-export type UpdateInquiryResponse = UpdateInquiryResponses[keyof UpdateInquiryResponses];
+export type CancelInquiryResponse = CancelInquiryResponses[keyof CancelInquiryResponses];
 
 export type RespondToInquiryData = {
     body: InquiryRespondRequest;
@@ -15333,7 +15936,7 @@ export type RespondToInquiryData = {
 
 export type RespondToInquiryErrors = {
     /**
-     * Invalid request or inquiry cannot be responded to
+     * Malformed request
      */
     400: unknown;
     /**
@@ -15348,6 +15951,14 @@ export type RespondToInquiryErrors = {
      * Inquiry not found
      */
     404: unknown;
+    /**
+     * Inquiry is no longer pending
+     */
+    409: unknown;
+    /**
+     * Response does not conform to the inquiry schema
+     */
+    422: unknown;
     /**
      * Internal server error
      */
@@ -17063,6 +17674,7 @@ export type SaveWorkflowFileResponses = {
              * Unique reference identifier
              */
             ref: string;
+            retired_at?: string | null;
             /**
              * Tags
              */
@@ -17449,6 +18061,100 @@ export type GetPackLatestInstallResponses = {
 };
 
 export type GetPackLatestInstallResponse = GetPackLatestInstallResponses[keyof GetPackLatestInstallResponses];
+
+export type GetPackReleasesData = {
+    body?: never;
+    path: {
+        /**
+         * Pack reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/packs/{ref}/releases';
+};
+
+export type GetPackReleasesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: AuthErrorResponse;
+    /**
+     * Pack not found
+     */
+    404: ErrorResponse;
+};
+
+export type GetPackReleasesError = GetPackReleasesErrors[keyof GetPackReleasesErrors];
+
+export type GetPackReleasesResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            archive_size: number;
+            created: string;
+            digest: string;
+            id: number;
+            inactive_since?: string | null;
+            is_active: boolean;
+            version: string;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetPackReleasesResponse = GetPackReleasesResponses[keyof GetPackReleasesResponses];
+
+export type GetRetiredPackComponentsData = {
+    body?: never;
+    path: {
+        /**
+         * Pack reference identifier
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/packs/{ref}/retired-components';
+};
+
+export type GetRetiredPackComponentsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: AuthErrorResponse;
+    /**
+     * Pack not found
+     */
+    404: ErrorResponse;
+};
+
+export type GetRetiredPackComponentsError = GetRetiredPackComponentsErrors[keyof GetRetiredPackComponentsErrors];
+
+export type GetRetiredPackComponentsResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: Array<{
+            component_ref?: string | null;
+            id: number;
+            kind: string;
+            managed_release?: number | null;
+            retired_at: string;
+        }>;
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetRetiredPackComponentsResponse = GetRetiredPackComponentsResponses[keyof GetRetiredPackComponentsResponses];
 
 export type TestPackData = {
     body?: never;
@@ -17935,6 +18641,7 @@ export type UpdatePermissionSetResponses = {
             label?: string | null;
             pack_ref?: string | null;
             ref: string;
+            retired_at?: string | null;
             roles: Array<PermissionSetRoleAssignmentResponse>;
         };
         /**
@@ -17985,6 +18692,47 @@ export type CreatePermissionSetRoleAssignmentResponses = {
 };
 
 export type CreatePermissionSetRoleAssignmentResponse = CreatePermissionSetRoleAssignmentResponses[keyof CreatePermissionSetRoleAssignmentResponses];
+
+export type GetPlatformCatalogData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/platform/catalog';
+};
+
+export type GetPlatformCatalogErrors = {
+    /**
+     * Unauthorized
+     */
+    401: AuthErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+};
+
+export type GetPlatformCatalogError = GetPlatformCatalogErrors[keyof GetPlatformCatalogErrors];
+
+export type GetPlatformCatalogResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: {
+            compatibility_epoch: number;
+            expected_compatibility_epoch: number;
+            expected_revision: number;
+            revision: number;
+            status: PlatformCatalogStatus;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetPlatformCatalogResponse = GetPlatformCatalogResponses[keyof GetPlatformCatalogResponses];
 
 export type ListPoliciesData = {
     body?: never;
@@ -18493,6 +19241,42 @@ export type DeleteQueueItemResponses = {
 };
 
 export type DeleteQueueItemResponse = DeleteQueueItemResponses[keyof DeleteQueueItemResponses];
+
+export type GetQueueItemData = {
+    body?: never;
+    path: {
+        /**
+         * Queue reference identifier
+         */
+        ref: string;
+        /**
+         * Queue item identifier
+         */
+        item_id: number;
+    };
+    query?: never;
+    url: '/api/v1/queues/{ref}/items/{item_id}';
+};
+
+export type GetQueueItemErrors = {
+    /**
+     * Insufficient permissions
+     */
+    403: unknown;
+    /**
+     * Queue or queue item not found
+     */
+    404: unknown;
+};
+
+export type GetQueueItemResponses = {
+    /**
+     * Queue item detail
+     */
+    200: ApiResponseWorkQueueItemResponse;
+};
+
+export type GetQueueItemResponse = GetQueueItemResponses[keyof GetQueueItemResponses];
 
 export type UpdateQueueItemData = {
     body: UpdateWorkQueueItemRequest;
@@ -20165,6 +20949,7 @@ export type CreateWorkflowResponses = {
              * Unique reference identifier
              */
             ref: string;
+            retired_at?: string | null;
             /**
              * Tags
              */
@@ -20289,6 +21074,7 @@ export type GetWorkflowResponses = {
              * Unique reference identifier
              */
             ref: string;
+            retired_at?: string | null;
             /**
              * Tags
              */
@@ -20389,6 +21175,7 @@ export type UpdateWorkflowResponses = {
              * Unique reference identifier
              */
             ref: string;
+            retired_at?: string | null;
             /**
              * Tags
              */
@@ -20493,6 +21280,7 @@ export type UpdateWorkflowFileResponses = {
              * Unique reference identifier
              */
             ref: string;
+            retired_at?: string | null;
             /**
              * Tags
              */
@@ -21166,9 +21954,20 @@ export type HealthData = {
     url: '/health';
 };
 
+export type HealthErrors = {
+    /**
+     * Platform is not ready
+     */
+    503: {
+        [key: string]: unknown;
+    };
+};
+
+export type HealthError = HealthErrors[keyof HealthErrors];
+
 export type HealthResponses = {
     /**
-     * Service is healthy
+     * Database and exact platform catalog are ready
      */
     200: {
         [key: string]: unknown;
@@ -21176,6 +21975,35 @@ export type HealthResponses = {
 };
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
+
+export type ContentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health/content';
+};
+
+export type ContentErrors = {
+    /**
+     * Content or coarse host capabilities are absent
+     */
+    503: {
+        [key: string]: unknown;
+    };
+};
+
+export type ContentError = ContentErrors[keyof ContentErrors];
+
+export type ContentResponses = {
+    /**
+     * Core content and coarse host capabilities are available
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ContentResponse = ContentResponses[keyof ContentResponses];
 
 export type HealthDetailedData = {
     body?: never;
