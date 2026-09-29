@@ -3570,7 +3570,7 @@ export type CreateDashboardRequest = {
     };
     spec_version?: number | null;
     tags?: Array<string>;
-    visibility: DashboardVisibility;
+    visibility?: null | DashboardVisibility;
 };
 
 /**
@@ -4383,7 +4383,7 @@ export type DashboardMetadataResponse = {
     visibility: DashboardVisibility;
 };
 
-export type DashboardScopeType = 'global' | 'pack' | 'identity' | 'tenant';
+export type DashboardScopeType = 'global' | 'pack' | 'identity';
 
 export type DashboardSourceCatalogResponse = {
     contracts: Array<DashboardSourceContractResponse>;
@@ -8779,7 +8779,7 @@ export type UpdateDashboardRequest = {
     label?: string | null;
     scope_ref?: string | null;
     scope_type?: null | DashboardScopeType;
-    spec: {
+    spec?: {
         [key: string]: unknown;
     } | null;
     spec_version?: number | null;
@@ -9087,19 +9087,19 @@ export type UpdateWorkQueueItemRequest = {
 
 export type UpdateWorkQueueRequest = {
     accepting_new_items?: boolean | null;
-    action_params: {
+    action_params?: {
         [key: string]: unknown;
     } | null;
     allow_pending_update?: boolean | null;
     batch_mode?: null | WorkQueueBatchMode;
-    config: {
+    config?: {
         [key: string]: unknown;
     } | null;
     default_priority?: number | null;
     description?: null | NullableStringPatch;
     dispatch_action_ref?: string | null;
     enabled?: boolean | null;
-    item_schema: {
+    item_schema?: {
         [key: string]: unknown;
     } | null;
     label?: string | null;
@@ -14419,6 +14419,10 @@ export type CancelExecutionData = {
 };
 
 export type CancelExecutionErrors = {
+    /**
+     * Caller is not authorized to cancel the execution
+     */
+    403: unknown;
     /**
      * Execution not found
      */
