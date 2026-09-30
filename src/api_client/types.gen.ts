@@ -714,6 +714,29 @@ export type ApiResponseAuthSettingsResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseBuildInfo = {
+    /**
+     * Identity compiled into this binary, never read from deployment-time environment variables.
+     */
+    data: {
+        /**
+         * Full source commit SHA, or "unknown" when the build had no revision metadata.
+         */
+        git_sha: string;
+        /**
+         * Semantic version of the platform workspace.
+         */
+        version: string;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponseBuildPackEnvsResponse = {
     /**
      * Response DTO for build pack environments operation
@@ -2813,6 +2836,20 @@ export type AuthErrorResponse = {
 export type AuthorizationBasis = 'keys' | 'executions' | 'events' | 'enforcements' | 'queues' | 'queue_items' | 'inquiries' | 'workers' | 'sensors' | 'dashboards';
 
 /**
+ * Identity compiled into this binary, never read from deployment-time environment variables.
+ */
+export type BuildInfo = {
+    /**
+     * Full source commit SHA, or "unknown" when the build had no revision metadata.
+     */
+    git_sha: string;
+    /**
+     * Semantic version of the platform workspace.
+     */
+    version: string;
+};
+
+/**
  * Request DTO for building pack environments
  */
 export type BuildPackEnvsRequest = {
@@ -3620,17 +3657,17 @@ export type CreateExecutionRequest = {
     artifact_retention_limit?: number | null;
     artifact_retention_policy?: null | RetentionPolicyType;
     /**
-     * Environment variables for this execution
+     * Environment overrides for this execution. ATTUNE_ names are reserved for internal use.
      */
-    env_vars: {
-        [key: string]: unknown;
-    };
+    env_vars?: {
+        [key: string]: string;
+    } | null;
     /**
      * Execution parameters/configuration
      */
-    parameters: {
+    parameters?: {
         [key: string]: unknown;
-    };
+    } | null;
     /**
      * Permission set refs to apply to this execution's API token. Omit to use
      * the action default. Provide an empty array to force no API token.
@@ -15697,6 +15734,22 @@ export type UpdateExternalIdentityMappingResponses = {
 };
 
 export type UpdateExternalIdentityMappingResponse = UpdateExternalIdentityMappingResponses[keyof UpdateExternalIdentityMappingResponses];
+
+export type GetInfoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/info';
+};
+
+export type GetInfoResponses = {
+    /**
+     * Build identity of the responding API process
+     */
+    200: ApiResponseBuildInfo;
+};
+
+export type GetInfoResponse = GetInfoResponses[keyof GetInfoResponses];
 
 export type ListInquiriesData = {
     body?: never;
