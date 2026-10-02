@@ -4502,6 +4502,12 @@ export type DependencyError = {
     pack_path: string;
 };
 
+export type DevicePollRequest = {
+    device_code: string;
+};
+
+export type DeviceWaitReason = 'authorization_pending' | 'slow_down' | 'provider_timeout';
+
 /**
  * Request DTO for downloading packs
  */
@@ -8862,7 +8868,7 @@ export type UpdateKeyRequest = {
  */
 export type UpdatePackRegistryIndexRequest = {
     enabled?: boolean | null;
-    headers: {
+    headers?: {
         [key: string]: unknown;
     } | null;
     name?: string | null;
@@ -16739,6 +16745,10 @@ export type BrowseIndexedPacksErrors = {
      * Forbidden
      */
     403: ErrorResponse;
+    /**
+     * Selected index could not be fetched or validated
+     */
+    502: ErrorResponse;
 };
 
 export type BrowseIndexedPacksError = BrowseIndexedPacksErrors[keyof BrowseIndexedPacksErrors];
@@ -21737,6 +21747,109 @@ export type UpdateCurrentUserResponses = {
 
 export type UpdateCurrentUserResponse = UpdateCurrentUserResponses[keyof UpdateCurrentUserResponses];
 
+export type OidcDevicePollData = {
+    body: DevicePollRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/oidc/device/poll';
+};
+
+export type OidcDevicePollErrors = {
+    /**
+     * Invalid device authorization session
+     */
+    400: ErrorResponse;
+    /**
+     * Invalid provider identity token
+     */
+    401: ErrorResponse;
+    /**
+     * Identity is frozen or has a conflicting binding
+     */
+    403: ErrorResponse;
+    /**
+     * OIDC provider exchange failed
+     */
+    502: ErrorResponse;
+};
+
+export type OidcDevicePollError = OidcDevicePollErrors[keyof OidcDevicePollErrors];
+
+export type OidcDevicePollResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: {
+            device_code: string;
+            interval: number;
+            reason: DeviceWaitReason;
+            status: 'waiting';
+        } | {
+            status: 'authorized';
+            tokens: TokenResponse;
+        } | {
+            status: 'access_denied';
+        } | {
+            status: 'expired';
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type OidcDevicePollResponse = OidcDevicePollResponses[keyof OidcDevicePollResponses];
+
+export type OidcDeviceStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/oidc/device/start';
+};
+
+export type OidcDeviceStartErrors = {
+    /**
+     * OIDC device grant is unsupported or not configured
+     */
+    501: ErrorResponse;
+    /**
+     * OIDC provider device authorization failed
+     */
+    502: ErrorResponse;
+};
+
+export type OidcDeviceStartError = OidcDeviceStartErrors[keyof OidcDeviceStartErrors];
+
+export type OidcDeviceStartResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        /**
+         * Device-code instructions returned by Attune's OIDC broker.
+         */
+        data: {
+            /**
+             * Opaque, encrypted authorization session. Never display this value.
+             */
+            device_code: string;
+            expires_in: number;
+            interval?: number;
+            user_code: string;
+            verification_uri: string;
+            verification_uri_complete?: string | null;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type OidcDeviceStartResponse = OidcDeviceStartResponses[keyof OidcDeviceStartResponses];
+
 export type OidcLoginData = {
     body?: never;
     path?: never;
@@ -21745,10 +21858,6 @@ export type OidcLoginData = {
          * Application path to return to after login
          */
         redirect_to?: string;
-        /**
-         * Local CLI callback URI
-         */
-        cli_redirect_uri?: string;
     };
     url: '/auth/oidc/login';
 };
