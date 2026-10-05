@@ -1377,7 +1377,7 @@ export type ApiResponseKeyResponse = {
          */
         updated: string;
         /**
-         * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+         * JSON value, or null when the caller cannot read and decrypt encrypted material.
          */
         value: unknown;
     };
@@ -5591,7 +5591,7 @@ export type KeyResponse = {
      */
     updated: string;
     /**
-     * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+     * JSON value, or null when the caller cannot read and decrypt encrypted material.
      */
     value: unknown;
 };
@@ -5677,6 +5677,8 @@ export type LoginRequest = {
      */
     password: string;
 };
+
+export type ManagementOriginKind = 'platform' | 'pack' | 'ad_hoc';
 
 /**
  * Node.js environment details
@@ -6970,6 +6972,26 @@ export type PaginatedResponsePackTestSummary = {
 /**
  * Paginated response wrapper
  */
+export type PaginatedResponsePermissionBindingResponse = {
+    /**
+     * The page items
+     */
+    items: Array<{
+        created: string;
+        id: number;
+        permission_set_id: number;
+        permission_set_ref: string;
+        target: PermissionBindingTarget;
+    }>;
+    /**
+     * Pagination metadata
+     */
+    pagination: PaginationMeta;
+};
+
+/**
+ * Paginated response wrapper
+ */
 export type PaginatedResponsePolicySummary = {
     /**
      * The page items
@@ -7421,6 +7443,31 @@ export type PermissionAssignmentResponse = {
     permission_set_ref: string;
 };
 
+export type PermissionBindingResponse = {
+    created: string;
+    id: number;
+    permission_set_id: number;
+    permission_set_ref: string;
+    target: PermissionBindingTarget;
+};
+
+export type PermissionBindingTarget = PermissionIdentityTarget | PermissionRoleTarget;
+
+export type PermissionIdentityTarget = {
+    identity_id: number;
+    login: string;
+    type: PermissionIdentityTargetType;
+};
+
+export type PermissionIdentityTargetType = 'identity';
+
+export type PermissionRoleTarget = {
+    role: string;
+    type: PermissionRoleTargetType;
+};
+
+export type PermissionRoleTargetType = 'role';
+
 export type PermissionSetRoleAssignmentResponse = {
     created: string;
     id: number;
@@ -7434,6 +7481,7 @@ export type PermissionSetSummary = {
     grants: Value;
     id: number;
     label?: string | null;
+    management_origin: ManagementOriginKind;
     pack_ref?: string | null;
     ref: string;
     retired_at?: string | null;
@@ -8383,6 +8431,17 @@ export type SetDataRequest = {
     data: {
         [key: string]: unknown;
     };
+};
+
+export type SignKeyJwtRequest = {
+    profile_ref: string;
+    subject: string;
+    ttl_seconds: number;
+};
+
+export type SignKeyJwtResponse = {
+    assertion: string;
+    expires_at: number;
 };
 
 export type SourceAvailability = 'available_now' | 'partial' | 'planned';
@@ -14939,6 +14998,10 @@ export type ListIdentitiesData = {
          * Number of items per page
          */
         page_size?: number;
+        /**
+         * Exact identity login.
+         */
+        login?: string | null;
     };
     url: '/api/v1/identities';
 };
@@ -16380,7 +16443,7 @@ export type CreateKeyResponses = {
              */
             updated: string;
             /**
-             * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+             * JSON value, or null when the caller cannot read and decrypt encrypted material.
              */
             value: unknown;
         };
@@ -16502,7 +16565,7 @@ export type GetKeyResponses = {
              */
             updated: string;
             /**
-             * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+             * JSON value, or null when the caller cannot read and decrypt encrypted material.
              */
             value: unknown;
         };
@@ -16600,7 +16663,7 @@ export type UpdateKeyResponses = {
              */
             updated: string;
             /**
-             * The secret value (decrypted if encrypted). Can be a string, object, array, number, or boolean.
+             * JSON value, or null when the caller cannot read and decrypt encrypted material.
              */
             value: unknown;
         };
@@ -16612,6 +16675,36 @@ export type UpdateKeyResponses = {
 };
 
 export type UpdateKeyResponse = UpdateKeyResponses[keyof UpdateKeyResponses];
+
+export type SignKeyJwtData = {
+    body: SignKeyJwtRequest;
+    path: {
+        /**
+         * System-owned signing key reference
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/keys/{ref}/sign-jwt';
+};
+
+export type SignKeyJwtResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: {
+            assertion: string;
+            expires_at: number;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type SignKeyJwtResponse2 = SignKeyJwtResponses[keyof SignKeyJwtResponses];
 
 export type ListPackIndicesData = {
     body?: never;
@@ -18524,6 +18617,35 @@ export type ValidatePackWorkflowsResponses = {
 
 export type ValidatePackWorkflowsResponse = ValidatePackWorkflowsResponses[keyof ValidatePackWorkflowsResponses];
 
+export type ListPermissionAssignmentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Page number (1-based)
+         */
+        page?: number;
+        /**
+         * Number of items per page
+         */
+        page_size?: number;
+        identity_id?: number | null;
+        identity_login?: string | null;
+        role?: string | null;
+        permission_set_ref?: string | null;
+    };
+    url: '/api/v1/permissions/assignments';
+};
+
+export type ListPermissionAssignmentsResponses = {
+    /**
+     * Direct identity and role permission assignments
+     */
+    200: PaginatedResponsePermissionBindingResponse;
+};
+
+export type ListPermissionAssignmentsResponse = ListPermissionAssignmentsResponses[keyof ListPermissionAssignmentsResponses];
+
 export type CreatePermissionAssignmentData = {
     body: CreatePermissionAssignmentRequest;
     path?: never;
@@ -18614,6 +18736,10 @@ export type ListPermissionSetsData = {
     path?: never;
     query?: {
         pack_ref?: string | null;
+        /**
+         * Include retired permission sets in administrative results.
+         */
+        include_retired?: boolean;
     };
     url: '/api/v1/permissions/sets';
 };
@@ -18626,6 +18752,43 @@ export type ListPermissionSetsResponses = {
 };
 
 export type ListPermissionSetsResponse = ListPermissionSetsResponses[keyof ListPermissionSetsResponses];
+
+export type GetPermissionSetData = {
+    body?: never;
+    path: {
+        /**
+         * Permission set ref
+         */
+        permission_set_ref: string;
+    };
+    query?: never;
+    url: '/api/v1/permissions/sets/by-ref/{permission_set_ref}';
+};
+
+export type GetPermissionSetResponses = {
+    /**
+     * Standard API response wrapper
+     */
+    200: {
+        data: {
+            description?: string | null;
+            grants: Value;
+            id: number;
+            label?: string | null;
+            management_origin: ManagementOriginKind;
+            pack_ref?: string | null;
+            ref: string;
+            retired_at?: string | null;
+            roles: Array<PermissionSetRoleAssignmentResponse>;
+        };
+        /**
+         * Optional message
+         */
+        message?: string | null;
+    };
+};
+
+export type GetPermissionSetResponse = GetPermissionSetResponses[keyof GetPermissionSetResponses];
 
 export type DeletePermissionSetRoleAssignmentData = {
     body?: never;
@@ -18681,7 +18844,12 @@ export type UpdatePermissionSetData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Validate and preview the update without persisting it.
+         */
+        dry_run?: boolean;
+    };
     url: '/api/v1/permissions/sets/{id}';
 };
 
@@ -18706,6 +18874,7 @@ export type UpdatePermissionSetResponses = {
             grants: Value;
             id: number;
             label?: string | null;
+            management_origin: ManagementOriginKind;
             pack_ref?: string | null;
             ref: string;
             retired_at?: string | null;
