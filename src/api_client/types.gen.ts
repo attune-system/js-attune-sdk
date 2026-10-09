@@ -373,6 +373,24 @@ export type AllocateFileVersionByRefRequest = {
 };
 
 /**
+ * Coverage describes only this read's source-time bounds, including ledger holes.
+ */
+export type AnalyticsReadMetadata = {
+    mode: DashboardFreshnessMode;
+    /**
+     * Oldest refresh actually used. This does not guarantee global coverage.
+     */
+    oldest_refresh?: string | null;
+    raw_ranges: Array<AnalyticsReadRange>;
+    summary_ranges: Array<AnalyticsReadRange>;
+};
+
+export type AnalyticsReadRange = {
+    end: string;
+    start: string;
+};
+
+/**
  * Information about an analyzed pack
  */
 export type AnalyzedPack = {
@@ -1390,6 +1408,32 @@ export type ApiResponseKeyResponse = {
 /**
  * Standard API response wrapper
  */
+export type ApiResponseNativeMaintenanceStatus = {
+    data: {
+        /**
+         * Persisted native-maintenance switch, independent of row retention.
+         */
+        enabled: boolean;
+        /**
+         * UTC time at which the API began collecting these observations.
+         */
+        observed_at: string;
+        partitions: Array<PartitionStatus>;
+        schedule: Array<MaintenanceScheduleStatus>;
+        /**
+         * Coverage extrema do not imply continuous coverage. Dirty hours use raw reads.
+         */
+        summaries: Array<SummaryStatus>;
+    };
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
 export type ApiResponsePackInstallResponse = {
     /**
      * Response for pack install/register operations with test results
@@ -1741,7 +1785,7 @@ export type ApiResponseRetentionConfig = {
          */
         advisory_lock_key?: number;
         /**
-         * Maximum rows to delete per target per cycle for regular tables.
+         * Maximum rows to delete in each committed batch.
          */
         batch_size?: number;
         /**
@@ -1754,13 +1798,23 @@ export type ApiResponseRetentionConfig = {
          */
         check_interval_seconds?: number;
         /**
-         * Report candidates without deleting rows/chunks.
+         * Report candidate rows without deleting them.
          */
         dry_run?: boolean;
         /**
          * Enable runtime row retention globally.
          */
         enabled?: boolean;
+        /**
+         * Maximum committed batches per target per cycle. Each target can delete
+         * at most batch_size * max_batches_per_target rows per cycle.
+         */
+        max_batches_per_target?: number;
+        /**
+         * Independent native partition/summary jobs. Persisted and reloaded with
+         * retention settings; raw reads remain available during materialization.
+         */
+        native_maintenance?: NativeMaintenanceConfig;
         /**
          * Per-target retention settings.
          */
@@ -3024,6 +3078,7 @@ export type CacheGenerationResponse = {
     client_refresh_id: string;
     created: string;
     created_by: null | I64;
+    created_by_execution: null | I64;
     expected_active_generation_id: null | I64;
     expected_chunk_count: number;
     expected_record_count: number | null;
@@ -3132,6 +3187,7 @@ export type CacheNamespacePolicyBody = {
      */
     max_retained_generations?: number | null;
     max_staging_generations?: number | null;
+    refresh_concurrency?: null | CacheRefreshConcurrency;
 };
 
 /**
@@ -3181,6 +3237,7 @@ export type CacheNamespaceResponse = {
      * Active generation record count, when populated.
      */
     record_count: number | null;
+    refresh_concurrency: CacheRefreshConcurrency;
     retired_at: string | null;
     /**
      * Active generation size in bytes, when populated.
@@ -3239,6 +3296,11 @@ export type CachePointLookupResponse = {
 };
 
 /**
+ * Admission behavior when a namespace has an unpublished refresh.
+ */
+export type CacheRefreshConcurrency = 'reuse' | 'conflict' | 'parallel';
+
+/**
  * Supervisor-owned cache generation/entry retention configuration.
  *
  * Persisted as the `cache_retention` JSON object on
@@ -3257,9 +3319,17 @@ export type CacheRetentionConfig = {
      */
     alert_limit_per_cycle?: number;
     /**
-     * Maximum `cache_entry` rows deleted per bounded batch call.
+     * Server-side statement deadline for refresh partition creation, independent of cleanup.
      */
-    batch_size?: number;
+    ddl_creation_statement_timeout_milliseconds?: number;
+    /**
+     * Maximum wait for cache partition DDL locks.
+     */
+    ddl_lock_timeout_milliseconds?: number;
+    /**
+     * Server-side deadline for one atomic generation reclamation.
+     */
+    ddl_statement_timeout_milliseconds?: number;
     /**
      * Report cleanup candidates and metrics without deleting rows.
      */
@@ -3280,12 +3350,9 @@ export type CacheRetentionConfig = {
      */
     freshness_alerts_enabled?: boolean;
     /**
-     * Maximum entry-deletion batches performed for a single cleanup-candidate
-     * generation within one supervisor cycle. Bounds how long a single
-     * high-cardinality generation can dominate a cycle; entries are always
-     * deleted in indexed bounded batches before the generation row itself.
+     * Total generation-reclamation budget per supervisor cycle.
      */
-    max_batches_per_generation?: number;
+    max_cleanup_cycle_milliseconds?: number;
     /**
      * Maximum cleanup-candidate generations (failed, or retired past
      * `readable_until`) processed in a single supervisor cycle.
@@ -3314,6 +3381,14 @@ export type CacheRetentionConfig = {
      * the freshness lookback before a repeated-failure alert is emitted.
      */
     staging_failure_alert_threshold?: number;
+    /**
+     * Minimum interval between successful parent/leaf cache statistics refreshes.
+     */
+    statistics_interval_seconds?: number;
+    /**
+     * Independent statement deadline for cache parent/leaf ANALYZE.
+     */
+    statistics_statement_timeout_milliseconds?: number;
 };
 
 export type CacheScanPageApiResponse = {
@@ -4335,6 +4410,13 @@ export type CurrentUserResponse = {
     provider_profile?: null | ProviderProfileResponse;
 };
 
+export type DashboardAnalyticsCoverage = {
+    event_volume: AnalyticsReadMetadata;
+    execution_status: AnalyticsReadMetadata;
+    execution_throughput: AnalyticsReadMetadata;
+    worker_status: AnalyticsReadMetadata;
+};
+
 export type DashboardAuthorizationMode = 'operator_global' | 'identity_filtered';
 
 export type DashboardDataRequest = {
@@ -4379,7 +4461,7 @@ export type DashboardEffectiveTimeRange = {
     timezone: string;
 };
 
-export type DashboardFreshnessMode = 'raw_only' | 'aggregate_only' | 'aggregate_plus_tail' | 'raw_only_fallback';
+export type DashboardFreshnessMode = 'raw_only' | 'summary_only' | 'summary_plus_raw' | 'cache_rawfallback';
 
 export type DashboardListItemResponse = {
     description?: string | null;
@@ -4448,6 +4530,10 @@ export type DashboardSourceError = {
 };
 
 export type DashboardSourceMeta = {
+    /**
+     * End of the continuous summarized prefix of this request, if any.
+     * Later covered islands are listed in read_coverage, not implied here.
+     */
     aggregate_watermark?: string | null;
     authorization_mode: DashboardAuthorizationMode;
     authorized_refs: {
@@ -4457,6 +4543,7 @@ export type DashboardSourceMeta = {
     cache_hit: boolean;
     freshness_mode: DashboardFreshnessMode;
     ordering: Array<string>;
+    read_coverage?: null | AnalyticsReadMetadata;
     truncated: boolean;
     unit_hints: {
         [key: string]: unknown;
@@ -5100,27 +5187,28 @@ export type FailedPackRegistration = {
  */
 export type FailureRateResponse = {
     /**
-     * Number of completed executions
+     * Number of transitions to completed
      */
     completed_count: number;
     /**
-     * Number of failed executions
+     * Number of transitions to failed, including retry attempts
      */
     failed_count: number;
     /**
      * Failure rate as a percentage (0.0 – 100.0)
      */
     failure_rate_pct: number;
+    read_coverage: AnalyticsReadMetadata;
     /**
      * Time range start
      */
     since: string;
     /**
-     * Number of timed-out executions
+     * Number of transitions to timeout, including retry attempts
      */
     timeout_count: number;
     /**
-     * Total executions reaching a terminal state in the window
+     * Total transitions to completed, failed, or timeout in the included hours
      */
     total_terminal: number;
     /**
@@ -5129,7 +5217,7 @@ export type FailureRateResponse = {
     until: string;
 };
 
-export type FreshnessMode = 'raw_only' | 'aggregate_only' | 'aggregate_plus_tail' | 'raw_only_fallback';
+export type FreshnessMode = 'raw_only' | 'summary_only' | 'summary_plus_raw' | 'cache_rawfallback';
 
 /**
  * Request DTO for getting pack dependencies
@@ -5678,7 +5766,56 @@ export type LoginRequest = {
     password: string;
 };
 
+export type MaintenanceJob = 'partition' | 'summary' | 'retention';
+
+export type MaintenanceScheduleStatus = {
+    job: MaintenanceJob;
+    last_success?: string | null;
+    next_due: string;
+};
+
+/**
+ * Daily UTC RANGE parents managed by the supervisor.
+ */
+export type ManagedTable = 'event' | 'execution_history' | 'audit_event';
+
 export type ManagementOriginKind = 'platform' | 'pack' | 'ad_hoc';
+
+/**
+ * Bounded native partition and hourly-summary maintenance.
+ */
+export type NativeMaintenanceConfig = {
+    default_repair_row_limit?: number;
+    enabled?: boolean;
+    lock_timeout_milliseconds?: number;
+    max_partition_cycle_milliseconds?: number;
+    max_partition_operations_per_cycle?: number;
+    max_summary_buckets_per_cycle?: number;
+    max_summary_cycle_milliseconds?: number;
+    max_summary_invalidations_per_bucket?: number;
+    operation_timeout_milliseconds?: number;
+    partition_interval_seconds?: number;
+    partition_lookahead_days?: number;
+    summary_bootstrap_hours?: number;
+    summary_interval_seconds?: number;
+};
+
+export type NativeMaintenanceStatus = {
+    /**
+     * Persisted native-maintenance switch, independent of row retention.
+     */
+    enabled: boolean;
+    /**
+     * UTC time at which the API began collecting these observations.
+     */
+    observed_at: string;
+    partitions: Array<PartitionStatus>;
+    schedule: Array<MaintenanceScheduleStatus>;
+    /**
+     * Coverage extrema do not imply continuous coverage. Dirty hours use raw reads.
+     */
+    summaries: Array<SummaryStatus>;
+};
 
 /**
  * Node.js environment details
@@ -7435,6 +7572,20 @@ export type PaginationMeta = {
     total_pages?: number | null;
 };
 
+/**
+ * Catalog-verified status. DEFAULT counts stop at repair_cap + 1; they are
+ * lower bounds when default_count_exact is false, never full backlog scans.
+ */
+export type PartitionStatus = {
+    default_count_exact: boolean;
+    default_rows_at_least: number;
+    future_partitions: number;
+    missing_future_partitions: number;
+    oldest_default_day?: string | null;
+    parent: ManagedTable;
+    registered_partitions: number;
+};
+
 export type PermissionAssignmentResponse = {
     created: string;
     id: number;
@@ -7900,7 +8051,7 @@ export type RetentionConfig = {
      */
     advisory_lock_key?: number;
     /**
-     * Maximum rows to delete per target per cycle for regular tables.
+     * Maximum rows to delete in each committed batch.
      */
     batch_size?: number;
     /**
@@ -7913,13 +8064,23 @@ export type RetentionConfig = {
      */
     check_interval_seconds?: number;
     /**
-     * Report candidates without deleting rows/chunks.
+     * Report candidate rows without deleting them.
      */
     dry_run?: boolean;
     /**
      * Enable runtime row retention globally.
      */
     enabled?: boolean;
+    /**
+     * Maximum committed batches per target per cycle. Each target can delete
+     * at most batch_size * max_batches_per_target rows per cycle.
+     */
+    max_batches_per_target?: number;
+    /**
+     * Independent native partition/summary jobs. Persisted and reloaded with
+     * retention settings; raw reads remain available during materialization.
+     */
+    native_maintenance?: NativeMaintenanceConfig;
     /**
      * Per-target retention settings.
      */
@@ -7946,7 +8107,6 @@ export type RetentionTargetConfig = {
  */
 export type RetentionTargetsConfig = {
     audit_events?: RetentionTargetConfig;
-    continuous_aggregates?: RetentionTargetConfig;
     enforcements?: RetentionTargetConfig;
     events?: RetentionTargetConfig;
     execution_admission?: RetentionTargetConfig;
@@ -8460,6 +8620,26 @@ export type SuccessResponse = {
      * Success indicator
      */
     success: boolean;
+};
+
+/**
+ * Independent hourly materializations. Enum order is also the state-lock order.
+ */
+export type SummaryKind = 'execution_status' | 'execution_creation' | 'event_volume' | 'worker_status';
+
+export type SummaryStatus = {
+    coverage_hours: number;
+    /**
+     * Extrema only. They do not assert continuous coverage.
+     */
+    covered_since?: string | null;
+    covered_until?: string | null;
+    dirty_hours: number;
+    dirty_notifications: number;
+    kind: SummaryKind;
+    latest_success?: string | null;
+    oldest_dirty_bucket?: string | null;
+    oldest_notification?: string | null;
 };
 
 export type TaintEffect = 'no_schedule' | 'prefer_no_schedule';
@@ -10483,11 +10663,11 @@ export type GetDashboardAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10532,6 +10712,10 @@ export type GetDashboardAnalyticsResponses = {
              */
             failure_rate: FailureRateResponse;
             /**
+             * Separate per-metric coverage, because sources can have different holes.
+             */
+            read_coverage: DashboardAnalyticsCoverage;
+            /**
              * Time range start
              */
             since: string;
@@ -10558,11 +10742,11 @@ export type GetEnforcementVolumeAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10610,11 +10794,11 @@ export type GetEventVolumeAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10639,6 +10823,7 @@ export type GetEventVolumeAnalyticsResponses = {
              * Data points: one per bucket (total events created)
              */
             data: Array<TimeSeriesPoint>;
+            read_coverage: AnalyticsReadMetadata;
             /**
              * Time range start
              */
@@ -10662,11 +10847,11 @@ export type GetFailureRateAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10688,27 +10873,28 @@ export type GetFailureRateAnalyticsResponses = {
          */
         data: {
             /**
-             * Number of completed executions
+             * Number of transitions to completed
              */
             completed_count: number;
             /**
-             * Number of failed executions
+             * Number of transitions to failed, including retry attempts
              */
             failed_count: number;
             /**
              * Failure rate as a percentage (0.0 – 100.0)
              */
             failure_rate_pct: number;
+            read_coverage: AnalyticsReadMetadata;
             /**
              * Time range start
              */
             since: string;
             /**
-             * Number of timed-out executions
+             * Number of transitions to timeout, including retry attempts
              */
             timeout_count: number;
             /**
-             * Total executions reaching a terminal state in the window
+             * Total transitions to completed, failed, or timeout in the included hours
              */
             total_terminal: number;
             /**
@@ -10730,11 +10916,11 @@ export type GetExecutionStatusAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10759,6 +10945,7 @@ export type GetExecutionStatusAnalyticsResponses = {
              * Data points: one per (bucket, status) pair
              */
             data: Array<TimeSeriesPoint>;
+            read_coverage: AnalyticsReadMetadata;
             /**
              * Time range start
              */
@@ -10782,11 +10969,11 @@ export type GetExecutionThroughputAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10811,6 +10998,7 @@ export type GetExecutionThroughputAnalyticsResponses = {
              * Data points: one per bucket (total executions created)
              */
             data: Array<TimeSeriesPoint>;
+            read_coverage: AnalyticsReadMetadata;
             /**
              * Time range start
              */
@@ -10834,11 +11022,11 @@ export type GetWorkerStatusAnalyticsData = {
     path?: never;
     query?: {
         /**
-         * Start of time range (ISO 8601). Defaults to 24 hours ago.
+         * Inclusive earliest UTC bucket start (ISO 8601). Defaults to 24 hours ago.
          */
         since?: string | null;
         /**
-         * End of time range (ISO 8601). Defaults to now.
+         * Inclusive latest UTC bucket start (ISO 8601). Defaults to now.
          */
         until?: string | null;
         /**
@@ -10863,6 +11051,7 @@ export type GetWorkerStatusAnalyticsResponses = {
              * Data points: one per (bucket, status) pair
              */
             data: Array<TimeSeriesPoint>;
+            read_coverage: AnalyticsReadMetadata;
             /**
              * Time range start
              */
@@ -13123,7 +13312,7 @@ export type CreateGenerationErrors = {
      */
     404: ErrorResponse;
     /**
-     * Refresh id, active-generation precondition, namespace state, or quota conflict
+     * Refresh already in progress (code cache_refresh_in_progress with generation_id and created_by_execution in details), refresh id, active-generation precondition, namespace state, or quota conflict
      */
     409: ErrorResponse;
     /**
@@ -13136,7 +13325,7 @@ export type CreateGenerationError = CreateGenerationErrors[keyof CreateGeneratio
 
 export type CreateGenerationResponses = {
     /**
-     * Matching idempotent generation replay
+     * Matching idempotent replay or existing unpublished generation reused by namespace policy
      */
     200: CacheGenerationApiResponse;
     /**
@@ -19610,6 +19799,10 @@ export type UpdateRetentionConfigErrors = {
      */
     403: unknown;
     /**
+     * Malformed retention configuration
+     */
+    422: unknown;
+    /**
      * Internal server error
      */
     500: unknown;
@@ -19623,6 +19816,41 @@ export type UpdateRetentionConfigResponses = {
 };
 
 export type UpdateRetentionConfigResponse = UpdateRetentionConfigResponses[keyof UpdateRetentionConfigResponses];
+
+export type GetNativeMaintenanceStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/retention-config/native-status';
+};
+
+export type GetNativeMaintenanceStatusErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Internal server error
+     */
+    500: unknown;
+    /**
+     * Native maintenance observations temporarily unavailable
+     */
+    503: unknown;
+};
+
+export type GetNativeMaintenanceStatusResponses = {
+    /**
+     * Native maintenance observations
+     */
+    200: ApiResponseNativeMaintenanceStatus;
+};
+
+export type GetNativeMaintenanceStatusResponse = GetNativeMaintenanceStatusResponses[keyof GetNativeMaintenanceStatusResponses];
 
 export type ListRulesData = {
     body?: never;

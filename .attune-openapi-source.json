@@ -1,6 +1,6 @@
 {
-  "source_ref": "v0.7.5",
-  "source_sha": "252ce12e96106d0249a0369aad86e5f4b39daf81",
-  "spec_sha256": "f6e449eed0979d63d21cd52ae68fef9823679f3731cb2c1ea36937463d53261e",
-  "version": "0.5.9"
+  "source_ref": "v0.8.0",
+  "source_sha": "a354b9cf239eefd3a15d8589ac61bf65b8c50747",
+  "spec_sha256": "0f06a688a53fc47d9023309a71a19deb08ebc6062418479f9d7f5550fbda4b9a",
+  "version": "0.5.10"
 }
