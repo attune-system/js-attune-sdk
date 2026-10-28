@@ -1701,6 +1701,7 @@ export type ApiResponsePolicyResponse = {
         quotas: Array<QuotaPolicyResponse>;
         rate_limit?: null | RateLimitPolicyResponse;
         ref: string;
+        resource_concurrency?: null | ResourceConcurrency;
         retired_at?: string | null;
         scope: PolicyScopeResponse;
         tags: Array<string>;
@@ -4257,6 +4258,7 @@ export type CreatePolicyRequest = {
     quotas?: Array<QuotaPolicyRequest>;
     rate_limit?: null | RateLimitPolicyRequest;
     ref: string;
+    resource_concurrency?: null | ResourceConcurrency;
     scope: PolicyScopeRequest;
     tags?: Array<string>;
 };
@@ -7601,6 +7603,7 @@ export type PaginatedResponsePolicySummary = {
         quotas: Array<QuotaPolicyResponse>;
         rate_limit?: null | RateLimitPolicyResponse;
         ref: string;
+        resource_concurrency?: null | ResourceConcurrency;
         retired_at?: string | null;
         scope: PolicyScopeResponse;
         tags: Array<string>;
@@ -8206,6 +8209,7 @@ export type PolicyResponse = {
     quotas: Array<QuotaPolicyResponse>;
     rate_limit?: null | RateLimitPolicyResponse;
     ref: string;
+    resource_concurrency?: null | ResourceConcurrency;
     retired_at?: string | null;
     scope: PolicyScopeResponse;
     tags: Array<string>;
@@ -8239,6 +8243,7 @@ export type PolicySummary = {
     quotas: Array<QuotaPolicyResponse>;
     rate_limit?: null | RateLimitPolicyResponse;
     ref: string;
+    resource_concurrency?: null | ResourceConcurrency;
     retired_at?: string | null;
     scope: PolicyScopeResponse;
     tags: Array<string>;
@@ -8638,6 +8643,18 @@ export type RendererInputApprovalRequest = {
 export type ResolvedWorkQueueDispatchTuningResponse = {
     batch_size?: number | null;
     concurrency?: number | null;
+};
+
+export type ResourceConcurrency = {
+    limit: number;
+    method: PolicyMethod;
+    namespace: string;
+    participants: Array<ResourceParticipant>;
+};
+
+export type ResourceParticipant = {
+    action: string;
+    resource_parameter: string;
 };
 
 /**
@@ -9872,6 +9889,7 @@ export type UpdatePolicyRequest = {
     priority?: number | null;
     quotas?: Array<QuotaPolicyRequest> | null;
     rate_limit?: null | RateLimitPolicyRequest;
+    resource_concurrency?: null | ResourceConcurrency;
     tags?: Array<string> | null;
 };
 
