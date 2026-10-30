@@ -4153,6 +4153,12 @@ export type CreatePackRegistryIndexRequest = {
      * Optional explicit search order position. Omit to append to the end.
      */
     position?: number | null;
+    /**
+     * Exact HTTPS origins mapped to source-specific archive/Git headers.
+     */
+    source_headers?: {
+        [key: string]: unknown;
+    };
     url: string;
 };
 
@@ -9810,6 +9816,12 @@ export type UpdatePackRegistryIndexRequest = {
     } | null;
     name?: string | null;
     position?: number | null;
+    /**
+     * Omit to preserve existing source headers; use {} to clear them.
+     */
+    source_headers?: {
+        [key: string]: unknown;
+    } | null;
     url?: string | null;
 };
 
@@ -17698,6 +17710,12 @@ export type ListPackIndicesResponses = {
             id: number;
             name?: string | null;
             position: number;
+            /**
+             * Exact source origins mapped to redacted archive/Git request headers.
+             */
+            source_headers: {
+                [key: string]: unknown;
+            };
             updated: string;
             url: string;
         }>;
@@ -17751,6 +17769,12 @@ export type CreatePackIndexResponses = {
             id: number;
             name?: string | null;
             position: number;
+            /**
+             * Exact source origins mapped to redacted archive/Git request headers.
+             */
+            source_headers: {
+                [key: string]: unknown;
+            };
             updated: string;
             url: string;
         };
@@ -17968,6 +17992,12 @@ export type UpdatePackIndexResponses = {
             id: number;
             name?: string | null;
             position: number;
+            /**
+             * Exact source origins mapped to redacted archive/Git request headers.
+             */
+            source_headers: {
+                [key: string]: unknown;
+            };
             updated: string;
             url: string;
         };
