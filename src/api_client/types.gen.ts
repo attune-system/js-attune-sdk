@@ -2803,6 +2803,103 @@ export type ArtifactBodyState = 'pending' | 'ready' | 'deleting' | 'cleanup_clai
 
 export type ArtifactClassification = 'general' | 'runtime_log';
 
+/**
+ * Count-free v1 artifact collection response. Pages are not historical snapshots.
+ */
+export type ArtifactCursorPageArtifactSummary = {
+    has_more: boolean;
+    items: Array<{
+        /**
+         * Classification used to distinguish runtime log artifacts from general artifacts.
+         */
+        classification: ArtifactClassification;
+        /**
+         * MIME content type
+         */
+        content_type?: string | null;
+        /**
+         * Creation timestamp
+         */
+        created: string;
+        /**
+         * Artifact ID
+         */
+        id: number;
+        /**
+         * Human-readable name
+         */
+        name?: string | null;
+        /**
+         * Owner identifier
+         */
+        owner: string;
+        /**
+         * Artifact reference
+         */
+        ref: string;
+        /**
+         * Owner scope
+         */
+        scope: OwnerType;
+        selected_version?: null | ArtifactVersionSummary;
+        /**
+         * Display size: execution-selected when scoped; omitted for global runtime logs.
+         */
+        size_bytes?: number | null;
+        /**
+         * Artifact type
+         */
+        type: ArtifactType;
+        /**
+         * Last update timestamp
+         */
+        updated: string;
+        /**
+         * Visibility level
+         */
+        visibility: ArtifactVisibility;
+    }>;
+    next_cursor?: string | null;
+};
+
+/**
+ * Count-free v1 artifact collection response. Pages are not historical snapshots.
+ */
+export type ArtifactCursorPageArtifactVersionSummary = {
+    has_more: boolean;
+    items: Array<{
+        /**
+         * MIME content type
+         */
+        content_type?: string | null;
+        /**
+         * Creation timestamp
+         */
+        created: string;
+        /**
+         * Reserved; arbitrary creator metadata is never exposed by summaries.
+         */
+        created_by?: string | null;
+        /**
+         * Execution that produced this version
+         */
+        execution?: number | null;
+        /**
+         * Version ID
+         */
+        id: number;
+        /**
+         * Size of content in bytes
+         */
+        size_bytes?: number | null;
+        /**
+         * Version number
+         */
+        version: number;
+    }>;
+    next_cursor?: string | null;
+};
+
 export type ArtifactJsonPatch = {
     op: 'set';
     value: Value;
@@ -2853,8 +2950,9 @@ export type ArtifactSummary = {
      * Owner scope
      */
     scope: OwnerType;
+    selected_version?: null | ArtifactVersionSummary;
     /**
-     * Size of latest version in bytes
+     * Display size: execution-selected when scoped; omitted for global runtime logs.
      */
     size_bytes?: number | null;
     /**
@@ -2893,7 +2991,6 @@ export type ArtifactVersionByRefUploadForm = {
  * Simplified version for list endpoints
  */
 export type ArtifactVersionSummary = {
-    body_state?: null | ArtifactBodyState;
     /**
      * MIME content type
      */
@@ -2903,7 +3000,7 @@ export type ArtifactVersionSummary = {
      */
     created: string;
     /**
-     * Who created this version
+     * Reserved; arbitrary creator metadata is never exposed by summaries.
      */
     created_by?: string | null;
     /**
@@ -2911,16 +3008,9 @@ export type ArtifactVersionSummary = {
      */
     execution?: number | null;
     /**
-     * Relative file path for disk-backed versions
-     */
-    file_path?: string | null;
-    /**
      * Version ID
      */
     id: number;
-    object_key?: string | null;
-    provider_version?: string | null;
-    sha256?: string | null;
     /**
      * Size of content in bytes
      */
@@ -6124,9 +6214,10 @@ export type LoginRequest = {
     password: string;
 };
 
-export type MaintenanceJob = 'partition' | 'summary' | 'retention';
+export type MaintenanceJob = 'partition' | 'summary' | 'retention' | 'object_retention';
 
 export type MaintenanceScheduleStatus = {
+    deferred_since?: string | null;
     job: MaintenanceJob;
     last_success?: string | null;
     next_due: string;
@@ -6955,120 +7046,6 @@ export type PaginatedResponseActionSummary = {
          * Workflow definition ID (non-null if this action is a workflow)
          */
         workflow_def?: number | null;
-    }>;
-    /**
-     * Pagination metadata
-     */
-    pagination: PaginationMeta;
-};
-
-/**
- * Paginated response wrapper
- */
-export type PaginatedResponseArtifactSummary = {
-    /**
-     * The page items
-     */
-    items: Array<{
-        /**
-         * Classification used to distinguish runtime log artifacts from general artifacts.
-         */
-        classification: ArtifactClassification;
-        /**
-         * MIME content type
-         */
-        content_type?: string | null;
-        /**
-         * Creation timestamp
-         */
-        created: string;
-        /**
-         * Artifact ID
-         */
-        id: number;
-        /**
-         * Human-readable name
-         */
-        name?: string | null;
-        /**
-         * Owner identifier
-         */
-        owner: string;
-        /**
-         * Artifact reference
-         */
-        ref: string;
-        /**
-         * Owner scope
-         */
-        scope: OwnerType;
-        /**
-         * Size of latest version in bytes
-         */
-        size_bytes?: number | null;
-        /**
-         * Artifact type
-         */
-        type: ArtifactType;
-        /**
-         * Last update timestamp
-         */
-        updated: string;
-        /**
-         * Visibility level
-         */
-        visibility: ArtifactVisibility;
-    }>;
-    /**
-     * Pagination metadata
-     */
-    pagination: PaginationMeta;
-};
-
-/**
- * Paginated response wrapper
- */
-export type PaginatedResponseArtifactVersionSummary = {
-    /**
-     * The page items
-     */
-    items: Array<{
-        body_state?: null | ArtifactBodyState;
-        /**
-         * MIME content type
-         */
-        content_type?: string | null;
-        /**
-         * Creation timestamp
-         */
-        created: string;
-        /**
-         * Who created this version
-         */
-        created_by?: string | null;
-        /**
-         * Execution that produced this version
-         */
-        execution?: number | null;
-        /**
-         * Relative file path for disk-backed versions
-         */
-        file_path?: string | null;
-        /**
-         * Version ID
-         */
-        id: number;
-        object_key?: string | null;
-        provider_version?: string | null;
-        sha256?: string | null;
-        /**
-         * Size of content in bytes
-         */
-        size_bytes?: number | null;
-        /**
-         * Version number
-         */
-        version: number;
     }>;
     /**
      * Pagination metadata
@@ -11891,9 +11868,9 @@ export type ListArtifactsData = {
          */
         name?: string | null;
         /**
-         * Page number (1-based)
+         * Opaque continuation bound to this endpoint and its filters.
          */
-        page?: number;
+        cursor?: string | null;
         /**
          * Items per page
          */
@@ -11902,11 +11879,18 @@ export type ListArtifactsData = {
     url: '/api/v1/artifacts';
 };
 
+export type ListArtifactsErrors = {
+    /**
+     * Invalid cursor or page size
+     */
+    400: unknown;
+};
+
 export type ListArtifactsResponses = {
     /**
-     * List of artifacts
+     * Metadata-visible cursor page
      */
-    200: PaginatedResponseArtifactSummary;
+    200: ArtifactCursorPageArtifactSummary;
 };
 
 export type ListArtifactsResponse = ListArtifactsResponses[keyof ListArtifactsResponses];
@@ -12629,7 +12613,13 @@ export type DownloadLatestData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Expected immutable version ID. A deleted/recreated version with the same
+         * version number must not be substituted. Omit for number/latest selection.
+         */
+        version_id?: number | null;
+    };
     url: '/api/v1/artifacts/{id}/download';
 };
 
@@ -12768,7 +12758,13 @@ export type StreamArtifactData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Expected immutable version ID. A deleted/recreated version with the same
+         * version number must not be substituted. Omit for number/latest selection.
+         */
+        version_id?: number | null;
+    };
     url: '/api/v1/artifacts/{id}/stream';
 };
 
@@ -12799,7 +12795,7 @@ export type ListVersionsData = {
         id: number;
     };
     query?: {
-        page?: number;
+        cursor?: string | null;
         per_page?: number;
     };
     url: '/api/v1/artifacts/{id}/versions';
@@ -12818,9 +12814,9 @@ export type ListVersionsErrors = {
 
 export type ListVersionsResponses = {
     /**
-     * Visible versions with exact totals
+     * Visible version metadata cursor page
      */
-    200: PaginatedResponseArtifactVersionSummary;
+    200: ArtifactCursorPageArtifactVersionSummary;
 };
 
 export type ListVersionsResponse = ListVersionsResponses[keyof ListVersionsResponses];
@@ -13021,7 +13017,13 @@ export type GetLatestVersionData = {
          */
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Expected immutable version ID. A deleted/recreated version with the same
+         * version number must not be substituted. Omit for number/latest selection.
+         */
+        version_id?: number | null;
+    };
     url: '/api/v1/artifacts/{id}/versions/latest';
 };
 
@@ -13249,7 +13251,13 @@ export type GetVersionData = {
          */
         version: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Expected immutable version ID. A deleted/recreated version with the same
+         * version number must not be substituted. Omit for number/latest selection.
+         */
+        version_id?: number | null;
+    };
     url: '/api/v1/artifacts/{id}/versions/{version}';
 };
 
@@ -13345,7 +13353,13 @@ export type DownloadVersionData = {
          */
         version: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Expected immutable version ID. A deleted/recreated version with the same
+         * version number must not be substituted. Omit for number/latest selection.
+         */
+        version_id?: number | null;
+    };
     url: '/api/v1/artifacts/{id}/versions/{version}/download';
 };
 
@@ -15246,7 +15260,7 @@ export type ListArtifactsByExecutionData = {
         execution_id: number;
     };
     query?: {
-        page?: number;
+        cursor?: string | null;
         per_page?: number;
         /**
          * Optional type filter, including bounded progress-artifact discovery.
@@ -15265,9 +15279,9 @@ export type ListArtifactsByExecutionErrors = {
 
 export type ListArtifactsByExecutionResponses = {
     /**
-     * Eligible artifacts with exact totals
+     * Execution-selected metadata cursor page
      */
-    200: PaginatedResponseArtifactSummary;
+    200: ArtifactCursorPageArtifactSummary;
 };
 
 export type ListArtifactsByExecutionResponse = ListArtifactsByExecutionResponses[keyof ListArtifactsByExecutionResponses];
