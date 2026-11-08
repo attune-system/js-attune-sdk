@@ -15145,9 +15145,17 @@ export type CreateExecutionErrors = {
      */
     400: unknown;
     /**
+     * Caller cannot execute or cover the selected grants
+     */
+    403: unknown;
+    /**
      * Action not found
      */
     404: unknown;
+    /**
+     * Execution sponsorship or protected output services are not ready
+     */
+    501: unknown;
 };
 
 export type CreateExecutionResponses = {
@@ -15750,6 +15758,10 @@ export type RescheduleExecutionErrors = {
      * Execution is not eligible for reschedule
      */
     409: unknown;
+    /**
+     * Recorded execution scheduling requires coordinated runtime readiness
+     */
+    501: unknown;
 };
 
 export type RescheduleExecutionResponses = {
@@ -20590,6 +20602,10 @@ export type EnqueueQueueItemErrors = {
      * Pending item conflict
      */
     409: unknown;
+    /**
+     * Queue sponsorship or protected delegated output is not ready
+     */
+    501: unknown;
 };
 
 export type EnqueueQueueItemResponses = {
@@ -20634,6 +20650,10 @@ export type BulkEnqueueQueueItemsErrors = {
      * Queue is not accepting items or pending item conflict
      */
     409: unknown;
+    /**
+     * Queue sponsorship or protected delegated output is not ready
+     */
+    501: unknown;
 };
 
 export type BulkEnqueueQueueItemsResponses = {
