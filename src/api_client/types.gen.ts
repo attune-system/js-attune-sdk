@@ -67,6 +67,11 @@ export type ActionResponse = {
     out_schema: {
         [key: string]: unknown;
     } | null;
+    output_format: OutputFormat;
+    /**
+     * Authored output channel policy; defaults resolve under the stored schema.
+     */
+    output_policy: OutputPolicy;
     /**
      * Pack ID
      */
@@ -472,6 +477,11 @@ export type ApiResponseActionResponse = {
         out_schema: {
             [key: string]: unknown;
         } | null;
+        output_format: OutputFormat;
+        /**
+         * Authored output channel policy; defaults resolve under the stored schema.
+         */
+        output_policy: OutputPolicy;
         /**
          * Pack ID
          */
@@ -1147,6 +1157,12 @@ export type ApiResponseExecutionResponse = {
         result: {
             [key: string]: unknown;
         };
+        /**
+         * Explicitly requested original channel values, separate from public projections.
+         */
+        revealed_output_channels?: {
+            [key: string]: unknown;
+        } | null;
         schema_binding?: null | Value;
         /**
          * When the execution actually started running (worker picked it up).
@@ -3846,6 +3862,14 @@ export type CreateActionRequest = {
         [key: string]: unknown;
     } | null;
     /**
+     * Parsing format for stdout.
+     */
+    output_format?: OutputFormat;
+    /**
+     * Output channel visibility choices, independent of secret inputs.
+     */
+    output_policy?: OutputPolicy;
+    /**
      * Pack reference this action belongs to
      */
     pack_ref: string;
@@ -4689,6 +4713,10 @@ export type CreateWorkflowRequest = {
         [key: string]: unknown;
     };
     /**
+     * Companion action output channel classification.
+     */
+    output_policy?: OutputPolicy;
+    /**
      * Pack reference this workflow belongs to
      */
     pack_ref: string;
@@ -5389,6 +5417,12 @@ export type ExecutionResponse = {
     result: {
         [key: string]: unknown;
     };
+    /**
+     * Explicitly requested original channel values, separate from public projections.
+     */
+    revealed_output_channels?: {
+        [key: string]: unknown;
+    } | null;
     schema_binding?: null | Value;
     /**
      * When the execution actually started running (worker picked it up).
@@ -6321,6 +6355,22 @@ export type NullableStringPatch = {
 } | {
     op: 'clear';
 };
+
+/**
+ * Format for action output parsing
+ */
+export type OutputFormat = 'text' | 'json' | 'yaml' | 'jsonl';
+
+/**
+ * Optional authoring choices. Resolve against the stored output contract once.
+ */
+export type OutputPolicy = {
+    error?: null | OutputVisibility;
+    stderr?: null | OutputVisibility;
+    stdout?: null | StdoutPolicy;
+};
+
+export type OutputVisibility = 'public' | 'secret';
 
 export type OwnerType = 'system' | 'identity' | 'pack' | 'action' | 'sensor';
 
@@ -9022,6 +9072,10 @@ export type SaveWorkflowFileRequest = {
         [key: string]: unknown;
     } | null;
     /**
+     * Companion action output channel classification.
+     */
+    output_policy?: OutputPolicy;
+    /**
      * Pack reference this workflow belongs to
      */
     pack_ref: string;
@@ -9264,6 +9318,8 @@ export type SignKeyJwtResponse = {
 export type SourceAvailability = 'available_now' | 'partial' | 'planned';
 
 export type SourceType = 'key_value' | 'latest_action_result' | 'action_result_path' | 'execution_count' | 'execution_timeseries' | 'execution_status_breakdown' | 'execution_duration_stats' | 'last_execution' | 'event_count' | 'event_timeseries' | 'last_event' | 'enforcement_count' | 'enforcement_timeseries' | 'last_enforcement' | 'queue_backlog' | 'queue_throughput' | 'queue_dispatch_stats' | 'inquiry_backlog' | 'inquiry_sla' | 'worker_health' | 'worker_status' | 'sensor_health';
+
+export type StdoutPolicy = 'public' | 'secret' | 'sanitized';
 
 /**
  * Success message response (for operations that don't return data)
@@ -9646,6 +9702,8 @@ export type UpdateActionRequest = {
     out_schema?: {
         [key: string]: unknown;
     } | null;
+    output_format?: null | OutputFormat;
+    output_policy?: null | OutputPolicy;
     /**
      * Parameter schema (StackStorm-style with inline required/secret)
      */
@@ -10134,6 +10192,7 @@ export type UpdateWorkflowRequest = {
     out_schema: {
         [key: string]: unknown;
     } | null;
+    output_policy?: null | OutputPolicy;
     /**
      * Parameter schema (StackStorm-style with inline required/secret)
      */
@@ -10681,6 +10740,11 @@ export type CreateActionResponses = {
             out_schema: {
                 [key: string]: unknown;
             } | null;
+            output_format: OutputFormat;
+            /**
+             * Authored output channel policy; defaults resolve under the stored schema.
+             */
+            output_policy: OutputPolicy;
             /**
              * Pack ID
              */
@@ -10988,6 +11052,11 @@ export type GetActionResponses = {
             out_schema: {
                 [key: string]: unknown;
             } | null;
+            output_format: OutputFormat;
+            /**
+             * Authored output channel policy; defaults resolve under the stored schema.
+             */
+            output_policy: OutputPolicy;
             /**
              * Pack ID
              */
@@ -11153,6 +11222,11 @@ export type UpdateActionResponses = {
             out_schema: {
                 [key: string]: unknown;
             } | null;
+            output_format: OutputFormat;
+            /**
+             * Authored output channel policy; defaults resolve under the stored schema.
+             */
+            output_policy: OutputPolicy;
             /**
              * Pack ID
              */
@@ -12629,10 +12703,16 @@ export type DownloadLatestErrors = {
      */
     404: unknown;
     /**
+     * Authorized log is finalizing (LOG_FINALIZING) or incomplete (LOG_INCOMPLETE)
+     */
+    409: ErrorResponse;
+    /**
      * Requested range is not satisfiable
      */
     416: unknown;
 };
+
+export type DownloadLatestError = DownloadLatestErrors[keyof DownloadLatestErrors];
 
 export type DownloadLatestResponses = {
     /**
@@ -13369,10 +13449,16 @@ export type DownloadVersionErrors = {
      */
     404: unknown;
     /**
+     * Authorized log is finalizing (LOG_FINALIZING) or incomplete (LOG_INCOMPLETE)
+     */
+    409: ErrorResponse;
+    /**
      * Requested range is not satisfiable
      */
     416: unknown;
 };
+
+export type DownloadVersionError = DownloadVersionErrors[keyof DownloadVersionErrors];
 
 export type DownloadVersionResponses = {
     /**
@@ -15425,6 +15511,12 @@ export type GetExecutionResponses = {
             result: {
                 [key: string]: unknown;
             };
+            /**
+             * Explicitly requested original channel values, separate from public projections.
+             */
+            revealed_output_channels?: {
+                [key: string]: unknown;
+            } | null;
             schema_binding?: null | Value;
             /**
              * When the execution actually started running (worker picked it up).
@@ -15574,6 +15666,12 @@ export type CancelExecutionResponses = {
             result: {
                 [key: string]: unknown;
             };
+            /**
+             * Explicitly requested original channel values, separate from public projections.
+             */
+            revealed_output_channels?: {
+                [key: string]: unknown;
+            } | null;
             schema_binding?: null | Value;
             /**
              * When the execution actually started running (worker picked it up).
