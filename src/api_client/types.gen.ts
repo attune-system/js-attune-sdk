@@ -1140,6 +1140,12 @@ export type ApiResponseExecutionResponse = {
          */
         id: number;
         /**
+         * Per-stream delivery availability; terminal execution status does not imply Ready logs.
+         */
+        log_delivery?: {
+            [key: string]: LogAvailability;
+        } | null;
+        /**
          * ID of the original execution if this execution is a retry.
          */
         original_execution?: number | null;
@@ -2344,10 +2350,6 @@ export type ApiResponseTriggerResponse = {
          * Whether webhooks are enabled for this trigger
          */
         webhook_enabled: boolean;
-        /**
-         * Webhook key (only present if webhooks are enabled)
-         */
-        webhook_key?: string | null;
     };
     /**
      * Optional message
@@ -2542,6 +2544,22 @@ export type ApiResponseVecWorkflowTaskWaitResponse = {
         updated: string;
         work_queue_ref?: string | null;
     }>;
+    /**
+     * Optional message
+     */
+    message?: string | null;
+};
+
+/**
+ * Standard API response wrapper
+ */
+export type ApiResponseWebhookManagementResponse = {
+    /**
+     * Credential-bearing response, returned only by explicit management operations.
+     */
+    data: TriggerResponse & {
+        webhook_key?: string | null;
+    };
     /**
      * Optional message
      */
@@ -4069,7 +4087,7 @@ export type CreateExecutionRequest = {
     artifact_retention_limit?: number | null;
     artifact_retention_policy?: null | RetentionPolicyType;
     /**
-     * Environment overrides for this execution. ATTUNE_ names are reserved for internal use.
+     * Caller environment values; names must be declared in the captured runtime execution_config.permitted_caller_env. Startup, search-path and ATTUNE_ controls are forbidden.
      */
     env_vars?: {
         [key: string]: string;
@@ -5400,6 +5418,12 @@ export type ExecutionResponse = {
      */
     id: number;
     /**
+     * Per-stream delivery availability; terminal execution status does not imply Ready logs.
+     */
+    log_delivery?: {
+        [key: string]: LogAvailability;
+    } | null;
+    /**
      * ID of the original execution if this execution is a retry.
      */
     original_execution?: number | null;
@@ -6220,6 +6244,17 @@ export type LdapLoginRequest = {
     password: string;
 };
 
+export type LogAvailability = {
+    artifact_version?: null | I64;
+    finalize_by?: string | null;
+    retry_after_ms?: number | null;
+    revision?: number | null;
+    state: LogAvailabilityState;
+    stream?: null | I64;
+};
+
+export type LogAvailabilityState = 'empty' | 'finalizing' | 'ready' | 'incomplete' | 'unknown';
+
 export type LogRetentionLimitPatch = {
     op: 'set';
     value: number;
@@ -6232,6 +6267,10 @@ export type LogRetentionPolicyPatch = {
     value: RetentionPolicyType;
 } | {
     op: 'clear';
+};
+
+export type LoginExchangeRequest = {
+    code: string;
 };
 
 /**
@@ -9598,10 +9637,6 @@ export type TriggerResponse = {
      * Whether webhooks are enabled for this trigger
      */
     webhook_enabled: boolean;
-    /**
-     * Webhook key (only present if webhooks are enabled)
-     */
-    webhook_key?: string | null;
 };
 
 export type TriggerSetOperation = 'set';
@@ -9812,8 +9847,17 @@ export type UpdateExternalIdentityMappingRequest = {
 
 export type UpdateIdentityRequest = {
     attributes?: null | Value;
+    /**
+     * Profile field; requires identities:update on the target.
+     */
     display_name?: string | null;
+    /**
+     * Administrative freeze state; requires identities:manage on the target.
+     */
     frozen?: boolean | null;
+    /**
+     * Password reset; requires identities:manage on the target.
+     */
     password?: string | null;
 };
 
@@ -10258,6 +10302,13 @@ export type ValidationResults = {
 };
 
 export type Value = unknown;
+
+/**
+ * Credential-bearing response, returned only by explicit management operations.
+ */
+export type WebhookManagementResponse = TriggerResponse & {
+    webhook_key?: string | null;
+};
 
 /**
  * Request body for webhook receiver endpoint
@@ -15494,6 +15545,12 @@ export type GetExecutionResponses = {
              */
             id: number;
             /**
+             * Per-stream delivery availability; terminal execution status does not imply Ready logs.
+             */
+            log_delivery?: {
+                [key: string]: LogAvailability;
+            } | null;
+            /**
              * ID of the original execution if this execution is a retry.
              */
             original_execution?: number | null;
@@ -15648,6 +15705,12 @@ export type CancelExecutionResponses = {
              * Execution ID
              */
             id: number;
+            /**
+             * Per-stream delivery availability; terminal execution status does not imply Ready logs.
+             */
+            log_delivery?: {
+                [key: string]: LogAvailability;
+            } | null;
             /**
              * ID of the original execution if this execution is a retry.
              */
@@ -22296,7 +22359,7 @@ export type DisableWebhookResponses = {
     /**
      * Webhooks disabled
      */
-    200: TriggerResponse;
+    200: ApiResponseWebhookManagementResponse;
 };
 
 export type DisableWebhookResponse = DisableWebhookResponses[keyof DisableWebhookResponses];
@@ -22328,7 +22391,7 @@ export type EnableWebhookResponses = {
     /**
      * Webhooks enabled
      */
-    200: TriggerResponse;
+    200: ApiResponseWebhookManagementResponse;
 };
 
 export type EnableWebhookResponse = EnableWebhookResponses[keyof EnableWebhookResponses];
@@ -22364,10 +22427,28 @@ export type RegenerateWebhookKeyResponses = {
     /**
      * Webhook key regenerated
      */
-    200: TriggerResponse;
+    200: ApiResponseWebhookManagementResponse;
 };
 
 export type RegenerateWebhookKeyResponse = RegenerateWebhookKeyResponses[keyof RegenerateWebhookKeyResponses];
+
+export type RevealWebhookKeyData = {
+    body?: never;
+    path: {
+        /**
+         * Trigger reference
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/v1/triggers/{ref}/webhooks/reveal';
+};
+
+export type RevealWebhookKeyResponses = {
+    200: ApiResponseWebhookManagementResponse;
+};
+
+export type RevealWebhookKeyResponse = RevealWebhookKeyResponses[keyof RevealWebhookKeyResponses];
 
 export type ListRulesByTriggerData = {
     body?: never;
@@ -23174,6 +23255,27 @@ export type ChangePasswordResponses = {
 
 export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
 
+export type LoginExchangeData = {
+    body: LoginExchangeRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/exchange';
+};
+
+export type LoginExchangeErrors = {
+    /**
+     * Invalid exchange
+     */
+    401: unknown;
+};
+
+export type LoginExchangeResponses = {
+    /**
+     * Browser login exchanged
+     */
+    200: unknown;
+};
+
 export type CreateSensorTokenInternalData = {
     body: InternalCreateSensorTokenRequest;
     path?: never;
@@ -23713,6 +23815,20 @@ export type RegisterResponses = {
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
+
+export type LogoutSessionData = {
+    body: RefreshTokenRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/session/logout';
+};
+
+export type LogoutSessionResponses = {
+    /**
+     * Session revoked
+     */
+    200: unknown;
+};
 
 export type AuthSettingsData = {
     body?: never;
