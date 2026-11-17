@@ -214,9 +214,39 @@ jobs:
           npm run build
           npm run test:package
 
-  merge:
+  report-validation:
     needs: [sync, verify]
-    if: needs.verify.result == 'success'
+    if: always() && needs.sync.outputs.pr-number != '' && needs.sync.outputs.head-sha != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write
+    steps:
+      - name: Record validation on the tested PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.sync.outputs.head-sha }}
+          VALIDATION_RESULT: ${{ needs.verify.result }}
+          CHECK_NAME: OpenAPI validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          case "$VALIDATION_RESULT" in
+            success) conclusion=success ;;
+            failure|cancelled|skipped) conclusion=failure ;;
+            *) echo "Unexpected validation result" >&2; exit 1 ;;
+          esac
+          jq -n \
+            --arg name "$CHECK_NAME" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg conclusion "$conclusion" \
+            --arg details_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{name: $name, head_sha: $head_sha, status: "completed", conclusion: $conclusion, details_url: $details_url}' \
+            | gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" --input -
+
+  merge:
+    needs: [sync, verify, report-validation]
+    if: needs.verify.result == 'success' && needs.report-validation.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
