@@ -20,6 +20,10 @@ export type ActionResponse = {
      */
     accesses_mcp: boolean;
     /**
+     * Definition-only ordering preview; never contains execution inputs.
+     */
+    argument_preview?: Array<ArgumentPreview> | null;
+    /**
      * Per-action retention limit override for non-log artifacts created by executions.
      */
     artifact_retention_limit?: number | null;
@@ -43,7 +47,7 @@ export type ActionResponse = {
     /**
      * Entry point
      */
-    entrypoint: string;
+    entrypoint?: string | null;
     /**
      * Action ID
      */
@@ -56,6 +60,7 @@ export type ActionResponse = {
      * Human-readable label
      */
     label: string;
+    launch?: null | LaunchSpec;
     /**
      * Per-action retention limit override for stdout/stderr execution log artifacts.
      */
@@ -86,6 +91,8 @@ export type ActionResponse = {
     param_schema: {
         [key: string]: unknown;
     } | null;
+    parameter_delivery: ParameterDelivery;
+    parameter_format: ParameterFormat;
     /**
      * Unique reference identifier
      */
@@ -217,7 +224,7 @@ export type ActionSummary = {
     /**
      * Entry point
      */
-    entrypoint: string;
+    entrypoint?: string | null;
     /**
      * Action ID
      */
@@ -226,6 +233,7 @@ export type ActionSummary = {
      * Human-readable label
      */
     label: string;
+    launch?: null | LaunchSpec;
     /**
      * Per-action retention limit override for stdout/stderr execution log artifacts.
      */
@@ -235,6 +243,8 @@ export type ActionSummary = {
      * Pack reference
      */
     pack_ref: string;
+    parameter_delivery: ParameterDelivery;
+    parameter_format: ParameterFormat;
     /**
      * Unique reference identifier
      */
@@ -430,6 +440,10 @@ export type ApiResponseActionResponse = {
          */
         accesses_mcp: boolean;
         /**
+         * Definition-only ordering preview; never contains execution inputs.
+         */
+        argument_preview?: Array<ArgumentPreview> | null;
+        /**
          * Per-action retention limit override for non-log artifacts created by executions.
          */
         artifact_retention_limit?: number | null;
@@ -453,7 +467,7 @@ export type ApiResponseActionResponse = {
         /**
          * Entry point
          */
-        entrypoint: string;
+        entrypoint?: string | null;
         /**
          * Action ID
          */
@@ -466,6 +480,7 @@ export type ApiResponseActionResponse = {
          * Human-readable label
          */
         label: string;
+        launch?: null | LaunchSpec;
         /**
          * Per-action retention limit override for stdout/stderr execution log artifacts.
          */
@@ -496,6 +511,8 @@ export type ApiResponseActionResponse = {
         param_schema: {
             [key: string]: unknown;
         } | null;
+        parameter_delivery: ParameterDelivery;
+        parameter_format: ParameterFormat;
         /**
          * Unique reference identifier
          */
@@ -673,13 +690,17 @@ export type ApiResponseAuditEventResponse = {
  */
 export type ApiResponseAuthSettingsResponse = {
     /**
-     * Public authentication settings for the login page.
+     * Public authentication and branding settings for the installation.
      */
     data: {
         /**
          * Whether authentication is enabled for the server.
          */
         authentication_enabled: boolean;
+        /**
+         * Installation branding for the web UI.
+         */
+        branding: BrandingConfig;
         /**
          * Whether LDAP login is configured and enabled.
          */
@@ -708,6 +729,10 @@ export type ApiResponseAuthSettingsResponse = {
          * Whether local username/password login should be shown by default.
          */
         local_password_visible_by_default: boolean;
+        /**
+         * Plain-text disclosure to show before login, when configured.
+         */
+        login_disclosure?: string | null;
         /**
          * Whether OIDC login is configured and enabled.
          */
@@ -2833,6 +2858,16 @@ export type ApprovalPurpose = {
     targets: Array<DeclaredInputApprovalTarget>;
 };
 
+/**
+ * Definition-only preview. Contains no execution input or resolved secret value.
+ */
+export type ArgumentPreview = {
+    cli?: null | CliBinding;
+    literal?: string | null;
+    order: number;
+    parameter?: string | null;
+};
+
 export type ArtifactBodyState = 'pending' | 'ready' | 'deleting' | 'cleanup_claimed';
 
 export type ArtifactClassification = 'general' | 'runtime_log';
@@ -3216,6 +3251,28 @@ export type AuthoredGrantConstraints = {
 };
 
 export type AuthorizationBasis = 'keys' | 'executions' | 'events' | 'enforcements' | 'queues' | 'queue_items' | 'inquiries' | 'workers' | 'sensors' | 'dashboards';
+
+/**
+ * Public image URLs for installation branding in the web UI.
+ */
+export type BrandingConfig = {
+    /**
+     * Browser tab icon.
+     */
+    favicon_url?: string | null;
+    /**
+     * Compact logo for the collapsed sidebar.
+     */
+    icon_url?: string | null;
+    /**
+     * Logo for the sign-in page and expanded sidebar.
+     */
+    logo_url?: string | null;
+    /**
+     * Tiled watermark for the workflow builder canvas.
+     */
+    workflow_watermark_url?: string | null;
+};
 
 /**
  * Identity compiled into this binary, never read from deployment-time environment variables.
@@ -3769,6 +3826,36 @@ export type ChangePasswordRequest = {
 
 export type ChecksumSubject = 'archive_bytes' | 'directory_content';
 
+export type ClasspathEntry = {
+    artifact: string;
+} | {
+    path: string;
+};
+
+/**
+ * Action-input annotation; values and their paths are never duplicated here.
+ */
+export type CliBinding = {
+    encoding?: Encoding;
+    expand?: boolean;
+    kind: 'positional';
+    order: number;
+} | {
+    encoding?: Encoding;
+    expand?: boolean;
+    kind: 'option';
+    missing?: MissingPolicy;
+    name: string;
+    order: number;
+    style?: OptionStyle;
+} | {
+    false_name?: string | null;
+    kind: 'flag';
+    missing?: MissingPolicy;
+    name: string;
+    order: number;
+};
+
 export type CloneDashboardRequest = {
     ref: string;
 };
@@ -3863,11 +3950,12 @@ export type CreateActionRequest = {
     /**
      * Entry point for action execution (e.g., path to script, function name)
      */
-    entrypoint: string;
+    entrypoint?: string | null;
     /**
      * Human-readable label
      */
     label: string;
+    launch?: null | LaunchSpec;
     /**
      * Optional per-action retention limit override for stdout/stderr execution log artifacts.
      */
@@ -3897,6 +3985,8 @@ export type CreateActionRequest = {
     param_schema?: {
         [key: string]: unknown;
     } | null;
+    parameter_delivery?: null | ParameterDelivery;
+    parameter_format?: null | ParameterFormat;
     /**
      * Unique reference identifier (e.g., "core.http", "aws.ec2.start_instance")
      */
@@ -5096,6 +5186,8 @@ export type EffectivePermissionResponse = {
     resource: string;
 };
 
+export type Encoding = 'scalar' | 'json';
+
 export type EnforcementCondition = 'any' | 'all';
 
 /**
@@ -6090,6 +6182,8 @@ export type InternalCreateSensorTokenRequest = {
     workload_id?: number | null;
 };
 
+export type IntrinsicHandler = 'attune.inquiry/v1';
+
 export type InvocationBinding = {
     action_ref: string;
     kind: 'action';
@@ -6230,6 +6324,31 @@ export type KeySummary = {
 
 export type LabelExpressionOperator = 'in' | 'not_in' | 'exists' | 'does_not_exist';
 
+export type LaunchSpec = {
+    arguments?: Array<LiteralArgument>;
+    program: string;
+    type: 'command';
+} | {
+    path: string;
+    type: 'file';
+} | {
+    arguments?: Array<LiteralArgument>;
+    artifact: string;
+    type: 'native';
+} | {
+    artifact: string;
+    jvm_args?: Array<string>;
+    type: 'java_jar';
+} | {
+    classpath: Array<ClasspathEntry>;
+    jvm_args?: Array<string>;
+    main_class: string;
+    type: 'java_class';
+} | {
+    handler: IntrinsicHandler;
+    type: 'intrinsic';
+};
+
 /**
  * Request body for LDAP login.
  */
@@ -6242,6 +6361,14 @@ export type LdapLoginRequest = {
      * User password
      */
     password: string;
+};
+
+/**
+ * One immutable token, ordered together with the parameter bindings.
+ */
+export type LiteralArgument = {
+    literal: string;
+    order: number;
 };
 
 export type LogAvailability = {
@@ -6302,6 +6429,8 @@ export type MaintenanceScheduleStatus = {
 export type ManagedTable = 'event' | 'execution_history' | 'audit_event';
 
 export type ManagementOriginKind = 'platform' | 'pack' | 'ad_hoc';
+
+export type MissingPolicy = 'omit' | 'error';
 
 /**
  * Bounded native partition and hourly-summary maintenance.
@@ -6394,6 +6523,8 @@ export type NullableStringPatch = {
 } | {
     op: 'clear';
 };
+
+export type OptionStyle = 'separate' | 'equals' | 'attached';
 
 /**
  * Format for action output parsing
@@ -7060,7 +7191,7 @@ export type PaginatedResponseActionSummary = {
         /**
          * Entry point
          */
-        entrypoint: string;
+        entrypoint?: string | null;
         /**
          * Action ID
          */
@@ -7069,6 +7200,7 @@ export type PaginatedResponseActionSummary = {
          * Human-readable label
          */
         label: string;
+        launch?: null | LaunchSpec;
         /**
          * Per-action retention limit override for stdout/stderr execution log artifacts.
          */
@@ -7078,6 +7210,8 @@ export type PaginatedResponseActionSummary = {
          * Pack reference
          */
         pack_ref: string;
+        parameter_delivery: ParameterDelivery;
+        parameter_format: ParameterFormat;
         /**
          * Unique reference identifier
          */
@@ -8157,6 +8291,16 @@ export type PaginationMeta = {
      */
     total_pages?: number | null;
 };
+
+/**
+ * How parameters should be delivered to an action
+ */
+export type ParameterDelivery = 'none' | 'stdin' | 'file';
+
+/**
+ * Format for parameter serialization
+ */
+export type ParameterFormat = 'dotenv' | 'json' | 'yaml';
 
 /**
  * Catalog-verified status. DEFAULT counts stop at repair_cap + 1; they are
@@ -9729,6 +9873,7 @@ export type UpdateActionRequest = {
      * Human-readable label
      */
     label?: string | null;
+    launch?: null | LaunchSpec;
     log_retention_limit?: null | LogRetentionLimitPatch;
     log_retention_policy?: null | LogRetentionPolicyPatch;
     /**
@@ -9745,6 +9890,8 @@ export type UpdateActionRequest = {
     param_schema?: {
         [key: string]: unknown;
     } | null;
+    parameter_delivery?: null | ParameterDelivery;
+    parameter_format?: null | ParameterFormat;
     /**
      * Replace the restricted visibility allow-list.
      */
@@ -10744,6 +10891,10 @@ export type CreateActionResponses = {
              */
             accesses_mcp: boolean;
             /**
+             * Definition-only ordering preview; never contains execution inputs.
+             */
+            argument_preview?: Array<ArgumentPreview> | null;
+            /**
              * Per-action retention limit override for non-log artifacts created by executions.
              */
             artifact_retention_limit?: number | null;
@@ -10767,7 +10918,7 @@ export type CreateActionResponses = {
             /**
              * Entry point
              */
-            entrypoint: string;
+            entrypoint?: string | null;
             /**
              * Action ID
              */
@@ -10780,6 +10931,7 @@ export type CreateActionResponses = {
              * Human-readable label
              */
             label: string;
+            launch?: null | LaunchSpec;
             /**
              * Per-action retention limit override for stdout/stderr execution log artifacts.
              */
@@ -10810,6 +10962,8 @@ export type CreateActionResponses = {
             param_schema: {
                 [key: string]: unknown;
             } | null;
+            parameter_delivery: ParameterDelivery;
+            parameter_format: ParameterFormat;
             /**
              * Unique reference identifier
              */
@@ -11056,6 +11210,10 @@ export type GetActionResponses = {
              */
             accesses_mcp: boolean;
             /**
+             * Definition-only ordering preview; never contains execution inputs.
+             */
+            argument_preview?: Array<ArgumentPreview> | null;
+            /**
              * Per-action retention limit override for non-log artifacts created by executions.
              */
             artifact_retention_limit?: number | null;
@@ -11079,7 +11237,7 @@ export type GetActionResponses = {
             /**
              * Entry point
              */
-            entrypoint: string;
+            entrypoint?: string | null;
             /**
              * Action ID
              */
@@ -11092,6 +11250,7 @@ export type GetActionResponses = {
              * Human-readable label
              */
             label: string;
+            launch?: null | LaunchSpec;
             /**
              * Per-action retention limit override for stdout/stderr execution log artifacts.
              */
@@ -11122,6 +11281,8 @@ export type GetActionResponses = {
             param_schema: {
                 [key: string]: unknown;
             } | null;
+            parameter_delivery: ParameterDelivery;
+            parameter_format: ParameterFormat;
             /**
              * Unique reference identifier
              */
@@ -11226,6 +11387,10 @@ export type UpdateActionResponses = {
              */
             accesses_mcp: boolean;
             /**
+             * Definition-only ordering preview; never contains execution inputs.
+             */
+            argument_preview?: Array<ArgumentPreview> | null;
+            /**
              * Per-action retention limit override for non-log artifacts created by executions.
              */
             artifact_retention_limit?: number | null;
@@ -11249,7 +11414,7 @@ export type UpdateActionResponses = {
             /**
              * Entry point
              */
-            entrypoint: string;
+            entrypoint?: string | null;
             /**
              * Action ID
              */
@@ -11262,6 +11427,7 @@ export type UpdateActionResponses = {
              * Human-readable label
              */
             label: string;
+            launch?: null | LaunchSpec;
             /**
              * Per-action retention limit override for stdout/stderr execution log artifacts.
              */
@@ -11292,6 +11458,8 @@ export type UpdateActionResponses = {
             param_schema: {
                 [key: string]: unknown;
             } | null;
+            parameter_delivery: ParameterDelivery;
+            parameter_format: ParameterFormat;
             /**
              * Unique reference identifier
              */
@@ -23843,13 +24011,17 @@ export type AuthSettingsResponses = {
      */
     200: {
         /**
-         * Public authentication settings for the login page.
+         * Public authentication and branding settings for the installation.
          */
         data: {
             /**
              * Whether authentication is enabled for the server.
              */
             authentication_enabled: boolean;
+            /**
+             * Installation branding for the web UI.
+             */
+            branding: BrandingConfig;
             /**
              * Whether LDAP login is configured and enabled.
              */
@@ -23878,6 +24050,10 @@ export type AuthSettingsResponses = {
              * Whether local username/password login should be shown by default.
              */
             local_password_visible_by_default: boolean;
+            /**
+             * Plain-text disclosure to show before login, when configured.
+             */
+            login_disclosure?: string | null;
             /**
              * Whether OIDC login is configured and enabled.
              */
